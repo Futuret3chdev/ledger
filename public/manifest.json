@@ -1,0 +1,10 @@
+{
+  "name": "Ledger by Futuret3ch",
+  "short_name": "Ledger",
+  "description": "Schedule bills and the payments coming up, in AUD.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3efe4",
+  "theme_color": "#12362f",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

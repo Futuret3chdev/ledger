@@ -1,0 +1,923 @@
+import { CATEGORIES, GST_LABEL, METHOD_LABEL, METHODS, RECURRENCE_LABEL, RECURRENCES } from '../lib/catalog.js';
+import { CSV_TEMPLATE, billsToCsv, draftsFromCsv, toCsv } from '../lib/csv.js';
+import { addDays, longDate, mondayOnOrBefore, quarterRange, shortDate, todayMelbourne } from '../lib/dates.js';
+import { dollarsToCents, formatAud, splitGst } from '../lib/money.js';
+import { itemStatus, openItems, projectBook, sumRemaining } from '../lib/schedule.js';
+import { normalizeBook } from '../lib/validate.js';
+import './styles.css';
+
+const root = document.getElementById('app');
+const VIEWS = ['due', 'schedule', 'bills', 'paid'];
+
+let book = null;
+let authed = false;
+let ready = false;
+let bootError = '';
+let view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'due';
+let sheet = null;
+let query = '';
+let category = 'all';
+let horizon = 90;
+let flashMsg = '';
+let busy = false;
+
+function esc(s) {
+  return String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+function nid(prefix) {
+  return `${prefix}_${crypto.randomUUID()}`;
+}
+
+function money(cents) {
+  return esc(formatAud(cents));
+}
+
+function flash(msg) {
+  flashMsg = msg || '';
+}
+
+async function request(path, options = {}) {
+  const res = await fetch(path, {
+    method: options.method || 'GET',
+    headers: options.body ? { 'content-type': 'application/json' } : undefined,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
+}
+
+function today() {
+  return todayMelbourne();
+}
+
+function knownItems(days) {
+  return projectBook(book, today(), addDays(today(), days));
+}
+
+function matches(item) {
+  if (category !== 'all' && item.category !== category) return false;
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return `${item.vendor} ${item.title} ${item.reference} ${item.category}`.toLowerCase().includes(q);
+}
+
+function findItem(billId, originalDate) {
+  return knownItems(Math.max(horizon, 400)).find((item) => item.billId === billId && item.originalDate === originalDate);
+}
+
+function download(name, text, type) {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function boot() {
+  ready = false;
+  bootError = '';
+  render();
+  try {
+    const session = await request('/api/session');
+    if (session.res.status === 503) {
+      bootError = session.data.error || 'Ledger access is not configured';
+      ready = true;
+      render();
+      return;
+    }
+    authed = session.res.ok;
+    if (authed) {
+      const state = await request('/api/state');
+      if (!state.res.ok) bootError = state.data.error || 'The desk did not open';
+      else book = state.data;
+    }
+  } catch {
+    bootError = 'The desk did not open. Check the connection and try again.';
+  }
+  ready = true;
+  render();
+}
+
+async function unlock() {
+  const code = document.getElementById('code')?.value || '';
+  busy = true;
+  flash('');
+  render();
+  try {
+    const { res, data } = await request('/api/session', { method: 'POST', body: { code } });
+    if (!res.ok) {
+      busy = false;
+      flash(data.error || 'That code is not right');
+      render();
+      return;
+    }
+    const state = await request('/api/state');
+    busy = false;
+    if (!state.res.ok) {
+      bootError = state.data.error || 'The desk did not open';
+      render();
+      return;
+    }
+    authed = true;
+    book = state.data;
+    bootError = '';
+    render();
+  } catch {
+    busy = false;
+    flash('The desk did not open. Check the connection and try again.');
+    render();
+  }
+}
+
+async function lock() {
+  await request('/api/session', { method: 'DELETE' }).catch(() => {});
+  authed = false;
+  book = null;
+  sheet = null;
+  flash('');
+  render();
+}
+
+async function push(next, okMessage) {
+  let normalized;
+  try {
+    normalized = normalizeBook({
+      ...next,
+      version: book.version,
+      deskName: next.deskName || book.deskName,
+    });
+  } catch (err) {
+    flash(err.message || 'Check that bill');
+    render();
+    return;
+  }
+  busy = true;
+  render();
+  try {
+    const { res, data } = await request('/api/state', { method: 'PUT', body: normalized });
+    busy = false;
+    if (res.status === 409 && data.book) {
+      book = data.book;
+      sheet = null;
+      flash('The desk changed on another screen. Loaded the latest.');
+      render();
+      return;
+    }
+    if (res.status === 401) {
+      authed = false;
+      book = null;
+      sheet = null;
+      flash('Locked');
+      render();
+      return;
+    }
+    if (!res.ok) {
+      flash(data.error || 'Not saved');
+      render();
+      return;
+    }
+    book = data;
+    sheet = null;
+    flash(okMessage || 'Saved');
+    render();
+  } catch {
+    busy = false;
+    flash('Not saved. The connection failed, so nothing was changed.');
+    render();
+  }
+}
+
+function withAdjustment(billId, occurrenceDate, patch) {
+  const adjustments = book.adjustments.map((a) => ({ ...a }));
+  let adj = adjustments.find((a) => a.billId === billId && a.occurrenceDate === occurrenceDate);
+  if (!adj) {
+    adj = { id: nid('adj'), billId, occurrenceDate, skip: false, moveTo: null, amountCents: null };
+    adjustments.push(adj);
+  }
+  Object.assign(adj, patch);
+  return {
+    ...book,
+    adjustments: adjustments.filter((a) => a.skip || a.moveTo || Number.isInteger(a.amountCents)),
+  };
+}
+
+function statusLabel(status) {
+  return {
+    overdue: 'Overdue',
+    'partial-overdue': 'Part paid · overdue',
+    partial: 'Part paid',
+    due: 'Due today',
+    scheduled: 'Scheduled',
+    paid: 'Paid',
+    overpaid: 'Paid, with extra',
+    skipped: 'Skipped',
+  }[status] || status;
+}
+
+function gstNote(item) {
+  if (!item.gst) return 'No GST';
+  return `GST ${formatAud(item.gst)}`;
+}
+
+function figureCard(items, direction, title, klass) {
+  const has = book.bills.some((bill) => bill.direction === direction);
+  if (!has) return '';
+  const day = today();
+  const overdue = openItems(items).filter((item) => item.date < day);
+  const in7 = openItems(items).filter((item) => item.date >= day && item.date <= addDays(day, 6));
+  const in30 = openItems(items).filter((item) => item.date >= day && item.date <= addDays(day, 29));
+  const cell = (list) => money(sumRemaining(list, direction));
+  return `<div class="figure ${klass}">
+      <h2>${title}</h2>
+      <div class="nums">
+        <div><b>${cell(overdue)}</b><span>Overdue</span></div>
+        <div><b>${cell(in7)}</b><span>Next 7 days</span></div>
+        <div><b>${cell(in30)}</b><span>Next 30 days</span></div>
+      </div>
+    </div>`;
+}
+
+function figuresHtml(items) {
+  const cards = figureCard(items, 'out', 'To pay', 'out') + figureCard(items, 'in', 'To receive', 'in');
+  if (!cards) return '';
+  return `<div class="figures">${cards}</div>
+  <p class="note">Overdue is not included in the 7 or 30 day totals. Next 7 days starts today. Totals stay on the whole desk when you search.</p>`;
+}
+
+function forecastHtml(items) {
+  const start = mondayOnOrBefore(today());
+  const weeks = [];
+  for (let i = 0; i < 8; i++) {
+    const from = addDays(start, i * 7);
+    const to = addDays(from, 6);
+    const slice = openItems(items).filter((item) => item.date >= from && item.date <= to);
+    weeks.push({ from, to, out: sumRemaining(slice, 'out'), inn: sumRemaining(slice, 'in') });
+  }
+  const busyWeeks = weeks.filter((week) => week.out || week.inn);
+  if (!busyWeeks.length) return '';
+  return `<div class="group"><h3>Weeks with something still open</h3><div class="weeks">${busyWeeks
+    .map(
+      (week) => `<div class="week"><span>${esc(shortDate(week.from))}</span>${week.out ? `<b>${money(week.out)}</b>` : ''}${week.inn ? `<b class="in">${money(week.inn)}</b>` : ''}</div>`
+    )
+    .join('')}</div><p class="note">Only weeks in the next eight that still have money open. A quiet week is left off.</p></div>`;
+}
+
+function quarterHtml(items) {
+  const range = quarterRange(today());
+  const slice = items.filter((item) => !item.skipped && item.date >= range.start && item.date <= range.end && item.gst > 0);
+  if (!slice.length) return '';
+  const gst = (direction) => slice.filter((item) => item.direction === direction).reduce((sum, item) => sum + item.gst, 0);
+  return `<div class="group"><h3>GST on bills in this BAS quarter</h3>
+    <div class="item"><div><div class="who">${esc(longDate(range.start))} – ${esc(longDate(range.end))}</div>
+      <div class="muted">On the bills dated in the quarter, skipped dates left out. This is not a lodged BAS.</div></div>
+      <div class="amt">${money(gst('out'))}<small>GST to pay</small></div></div>
+    <div class="item"><div class="who">GST on money in</div><div class="amt">${money(gst('in'))}<small>on invoices dated in the quarter</small></div></div>
+  </div>`;
+}
+
+function itemHtml(item, { actions = true } = {}) {
+  const day = today();
+  const status = itemStatus(item, day);
+  const bad = status === 'overdue' || status === 'partial-overdue';
+  const who = item.direction === 'in' ? 'To receive' : 'To pay';
+  const verb = item.direction === 'in' ? 'Received' : 'Pay';
+  return `<article class="item ${bad ? 'over' : ''}">
+    <div>
+      <div class="when ${bad ? 'bad' : ''}"><span class="tag ${item.direction}">${who}</span>${esc(longDate(item.date))} · ${esc(statusLabel(status))}</div>
+      <div class="who">${esc(item.vendor)}</div>
+      <div class="muted">${esc(item.title)} · ${esc(RECURRENCE_LABEL[item.recurrence])} · ${esc(item.category)}${item.reference ? ` · ${esc(item.reference)}` : ''}</div>
+      ${item.date !== item.originalDate ? `<div class="muted">Moved from ${esc(longDate(item.originalDate))}</div>` : ''}
+      ${item.paidCents > 0 && item.remainingCents > 0 ? `<div class="muted">${money(item.paidCents)} recorded, ${money(item.remainingCents)} still open</div>` : ''}
+    </div>
+    <div class="amt">${money(item.remainingCents || item.total)}<small>${esc(gstNote(item))}${item.extraCents ? ` · extra ${esc(formatAud(item.extraCents))}` : ''}</small></div>
+    ${
+      actions
+        ? `<div class="actions">
+            ${item.remainingCents > 0 && !item.skipped ? `<button class="solid" type="button" data-act="pay" data-bill="${esc(item.billId)}" data-when="${esc(item.originalDate)}">${verb}</button>` : ''}
+            <button class="ghost" type="button" data-act="more" data-bill="${esc(item.billId)}" data-when="${esc(item.originalDate)}">Change this date</button>
+          </div>`
+        : ''
+    }
+  </article>`;
+}
+
+function toolsHtml() {
+  return `<div class="tools">
+    <input id="q" type="search" placeholder="Search who, what, or reference" value="${esc(query)}" />
+    <select id="cat" aria-label="Category">
+      <option value="all" ${category === 'all' ? 'selected' : ''}>All categories</option>
+      ${CATEGORIES.map((c) => `<option ${category === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+    </select>
+    <button class="solid" type="button" data-act="add">Add a bill</button>
+  </div>`;
+}
+
+function dueView() {
+  const items = knownItems(90);
+  if (!book.bills.length) {
+    return `<div class="empty">
+      <h2>Nothing scheduled.</h2>
+      <p>Add a bill you actually owe, or one a client actually owes you. A repeat fills the later dates. A payment stays on the date you record it. This desk does not start with sample bills.</p>
+      <div class="stack">
+        <button class="solid" type="button" data-act="add">Add a bill</button>
+        <button class="ghost" type="button" data-act="pick-csv">Import a CSV of real bills</button>
+      </div>
+    </div>`;
+  }
+  const open = openItems(items).filter(matches);
+  const day = today();
+  const groups = [
+    ['Overdue', open.filter((item) => item.date < day)],
+    ['Today', open.filter((item) => item.date === day)],
+    ['Rest of 7 days', open.filter((item) => item.date > day && item.date <= addDays(day, 6))],
+    ['Rest of 30 days', open.filter((item) => item.date > addDays(day, 6) && item.date <= addDays(day, 29))],
+    ['Days 31–90', open.filter((item) => item.date > addDays(day, 29) && item.date <= addDays(day, 90))],
+  ].filter(([, list]) => list.length);
+  return `${figuresHtml(items)}
+    ${forecastHtml(items)}
+    ${quarterHtml(items)}
+    ${toolsHtml()}
+    ${
+      groups.length
+        ? groups.map(([label, list]) => `<section class="group"><h3>${label}</h3>${list.map((item) => itemHtml(item)).join('')}</section>`).join('')
+        : `<div class="empty"><h2>Nothing open in the next 90 days.</h2><p>${query || category !== 'all' ? 'Nothing matched that search.' : 'Paid and skipped dates are on Schedule and Paid.'}</p></div>`
+    }`;
+}
+
+function scheduleView() {
+  const items = knownItems(horizon).filter((item) => item.date >= today() && item.date <= addDays(today(), horizon)).filter(matches);
+  return `<div class="tools">
+      <label class="muted" for="horizon">Show</label>
+      <select id="horizon" aria-label="How far ahead">
+        ${[30, 90, 180, 365].map((n) => `<option value="${n}" ${horizon === n ? 'selected' : ''}>${n} days</option>`).join('')}
+      </select>
+      <input id="q" type="search" placeholder="Search" value="${esc(query)}" />
+      <button class="ghost" type="button" data-act="export-schedule">Export this schedule</button>
+    </div>
+    ${
+      items.length
+        ? items.map((item) => itemHtml(item)).join('')
+        : `<div class="empty"><h2>No dates in this window.</h2><p>Add a bill, or look further ahead.</p></div>`
+    }`;
+}
+
+function billsView() {
+  const items = knownItems(370);
+  const cards = book.bills
+    .slice()
+    .sort((a, b) => a.vendor.localeCompare(b.vendor))
+    .map((bill) => {
+      const next = openItems(items).find((item) => item.billId === bill.id);
+      return `<article class="bill">
+        <div class="when"><span class="tag ${bill.direction}">${bill.direction === 'in' ? 'To receive' : 'To pay'}</span>${bill.paused ? '<span class="tag">Paused</span>' : ''}</div>
+        <b>${esc(bill.vendor)}</b>
+        <div class="muted">${esc(bill.title)} · ${esc(RECURRENCE_LABEL[bill.recurrence])} · ${money(splitGst(bill.amountCents, bill.gstMode).total)} payable · ${esc(GST_LABEL[bill.gstMode].toLowerCase())}</div>
+        <div class="muted">${next ? `Next open ${esc(longDate(next.date))} · ${money(next.remainingCents)}` : 'Nothing open in the next year'}${bill.endsOn ? ` · ends ${esc(longDate(bill.endsOn))}` : ''}</div>
+        <div class="actions">
+          <button class="ghost" type="button" data-act="edit" data-bill="${esc(bill.id)}">Edit</button>
+          <button class="ghost" type="button" data-act="pause" data-bill="${esc(bill.id)}">${bill.paused ? 'Resume' : 'Pause'}</button>
+          <button class="ghost danger" type="button" data-act="delete" data-bill="${esc(bill.id)}">Remove</button>
+        </div>
+      </article>`;
+    })
+    .join('');
+  return `${toolsHtml()}
+    ${cards || `<div class="empty"><h2>No bills yet.</h2><p>The list stays empty until you add one.</p></div>`}
+    <div class="group">
+      <h3>Desk</h3>
+      <div class="field"><label for="desk">Name on this desk</label><input id="desk" value="${esc(book.deskName)}" /></div>
+      <div class="stack">
+        <button class="solid" type="button" data-act="save-desk">Save name</button>
+        <button class="ghost" type="button" data-act="export-bills">Export bills CSV</button>
+        <button class="ghost" type="button" data-act="template">Download a blank CSV</button>
+        <button class="ghost" type="button" data-act="pick-csv">Import bills CSV</button>
+        <button class="ghost" type="button" data-act="export-json">Export desk backup</button>
+        <button class="ghost" type="button" data-act="pick-json">Replace desk from a backup</button>
+      </div>
+      <p class="note">Import adds rows to this desk. A backup replace removes what is here and puts the file in its place. Blank template has column names only.</p>
+    </div>`;
+}
+
+function paidView() {
+  const payments = book.payments
+    .slice()
+    .sort((a, b) => b.paidOn.localeCompare(a.paidOn) || b.createdAt.localeCompare(a.createdAt));
+  if (!payments.length) {
+    return `<div class="empty"><h2>No payments recorded.</h2><p>When you mark a date paid, it is listed here with the amount, the day, and the method.</p></div>`;
+  }
+  return `<div class="tools"><button class="ghost" type="button" data-act="export-paid">Export payments CSV</button></div>
+    ${payments
+      .map((payment) => {
+        const bill = book.bills.find((item) => item.id === payment.billId);
+        return `<article class="pay">
+          <div class="when">${esc(longDate(payment.paidOn))} · ${esc(METHOD_LABEL[payment.method] || payment.method)}</div>
+          <b>${esc(bill?.vendor || 'Removed bill')}</b>
+          <div class="muted">${esc(bill?.title || '')} · for the date ${esc(longDate(payment.occurrenceDate))}${payment.reference ? ` · ${esc(payment.reference)}` : ''}</div>
+          <div class="amt">${money(payment.amountCents)}</div>
+          <div class="actions"><button class="ghost danger" type="button" data-act="unpay" data-pay="${esc(payment.id)}">Remove this payment</button></div>
+        </article>`;
+      })
+      .join('')}`;
+}
+
+function billSheet() {
+  const existing = sheet.billId ? book.bills.find((bill) => bill.id === sheet.billId) : null;
+  const direction = existing?.direction || 'out';
+  return `<div class="sheet-bg" data-act="close">
+    <form class="sheet" data-sheet id="bill-form">
+      <div class="handle"></div>
+      <h2>${existing ? 'Edit bill' : 'Add a bill'}</h2>
+      <div class="field"><span class="muted">Direction</span>
+        <div class="choice">
+          <label><input type="radio" name="direction" value="out" ${direction === 'out' ? 'checked' : ''}/> We pay</label>
+          <label><input type="radio" name="direction" value="in" ${direction === 'in' ? 'checked' : ''}/> They pay us</label>
+        </div>
+      </div>
+      <div class="field"><label for="vendor">Who</label><input id="vendor" required value="${esc(existing?.vendor || '')}" /></div>
+      <div class="field"><label for="title">What it is for</label><input id="title" required value="${esc(existing?.title || '')}" /></div>
+      <div class="pair">
+        <div class="field"><label for="amount">Amount (AUD)</label><input id="amount" inputmode="decimal" required value="${existing ? (existing.amountCents / 100).toFixed(2) : ''}" /></div>
+        <div class="field"><label for="gst">GST</label><select id="gst">${Object.entries(GST_LABEL)
+          .map(([key, label]) => `<option value="${key}" ${existing?.gstMode === key ? 'selected' : ''}>${esc(label)}</option>`)
+          .join('')}</select></div>
+      </div>
+      <div class="pair">
+        <div class="field"><label for="starts">First due date</label><input id="starts" type="date" required value="${esc(existing?.startsOn || today())}" /></div>
+        <div class="field"><label for="repeats">Repeats</label><select id="repeats">${RECURRENCES.map(
+          (key) => `<option value="${key}" ${existing?.recurrence === key || (!existing && key === 'monthly') ? 'selected' : ''}>${esc(RECURRENCE_LABEL[key])}</option>`
+        ).join('')}</select></div>
+      </div>
+      <div class="field"><label for="category">Category</label><select id="category">${CATEGORIES.map(
+        (c) => `<option ${existing?.category === c || (!existing && c === 'Other') ? 'selected' : ''}>${esc(c)}</option>`
+      ).join('')}</select></div>
+      <details ${existing?.reference || existing?.notes || existing?.endsOn ? 'open' : ''}>
+        <summary>Reference, notes, end date</summary>
+        <div class="field"><label for="reference">Invoice, BPAY, or account</label><input id="reference" value="${esc(existing?.reference || '')}" /></div>
+        <div class="field"><label for="notes">Notes</label><textarea id="notes" rows="3">${esc(existing?.notes || '')}</textarea></div>
+        <div class="field"><label for="ends">Last due date, if it stops</label><input id="ends" type="date" value="${esc(existing?.endsOn || '')}" /></div>
+      </details>
+      ${existing ? `<label class="check"><input id="paused" type="checkbox" ${existing.paused ? 'checked' : ''}/> Pause future dates</label>` : ''}
+      <div class="stack" style="margin-top:12px">
+        <button class="solid" type="submit">${existing ? 'Save bill' : 'Add bill'}</button>
+        <button class="ghost" type="button" data-act="close">Cancel</button>
+      </div>
+      <p class="note">Changing the amount changes what is still unpaid. Payments already recorded stay as entered. A monthly date keeps the same day, or the last day of a short month.</p>
+    </form>
+  </div>`;
+}
+
+function paySheet() {
+  const item = findItem(sheet.billId, sheet.when);
+  if (!item) return '';
+  const verb = item.direction === 'in' ? 'Record a receipt' : 'Record a payment';
+  return `<div class="sheet-bg" data-act="close">
+    <form class="sheet" data-sheet id="pay-form">
+      <div class="handle"></div>
+      <h2>${verb}</h2>
+      <p class="note">${esc(item.vendor)} · ${esc(item.title)} · due ${esc(longDate(item.date))}. Still open ${money(item.remainingCents)}. This stays on that due date and does not pay the next one.</p>
+      <div class="field"><label for="pay-amount">Amount (AUD)</label><input id="pay-amount" inputmode="decimal" value="${(item.remainingCents / 100).toFixed(2)}" /></div>
+      <div class="field"><label for="pay-on">Date</label><input id="pay-on" type="date" value="${today()}" /></div>
+      <div class="field"><label for="pay-method">Method</label><select id="pay-method">${METHODS.map(
+        (key) => `<option value="${key}">${esc(METHOD_LABEL[key])}</option>`
+      ).join('')}</select></div>
+      <div class="field"><label for="pay-ref">Reference</label><input id="pay-ref" /></div>
+      <div class="stack">
+        <button class="solid" type="submit">Save</button>
+        <button class="ghost" type="button" data-act="close">Cancel</button>
+      </div>
+    </form>
+  </div>`;
+}
+
+function moreSheet() {
+  const item = findItem(sheet.billId, sheet.when);
+  if (!item) return '';
+  return `<div class="sheet-bg" data-act="close">
+    <form class="sheet" data-sheet id="more-form">
+      <div class="handle"></div>
+      <h2>This date only</h2>
+      <p class="note">${esc(item.vendor)} · ${esc(longDate(item.originalDate))}. The rest of the series stays as it is.</p>
+      <div class="field"><label for="move-to">Move it to</label><input id="move-to" type="date" value="${esc(item.date)}" /></div>
+      <div class="field"><label for="one-amount">Amount for this date (AUD)</label><input id="one-amount" inputmode="decimal" value="${((book.bills.find((bill) => bill.id === item.billId)?.gstMode === 'exclusive' ? item.exGst : item.total) / 100).toFixed(2)}" /></div>
+      <p class="note">Same kind of amount as the bill. GST is worked out from that. Payable on this date now: ${money(item.total)}.</p>
+      <div class="stack">
+        <button class="solid" type="submit">Save this date</button>
+        <button class="ghost" type="button" data-act="skip" data-bill="${esc(item.billId)}" data-when="${esc(item.originalDate)}">${item.skipped ? 'Put this date back' : 'Skip this date'}</button>
+        <button class="ghost" type="button" data-act="close">Cancel</button>
+      </div>
+    </form>
+  </div>`;
+}
+
+function importSheet() {
+  const rows = sheet.drafts.length
+    ? `<p>${sheet.drafts.length} bill${sheet.drafts.length === 1 ? '' : 's'} ready to add.</p>`
+    : `<p>No bills to add.</p>`;
+  const problems = sheet.errors.length
+    ? `<div class="errors">${sheet.errors
+        .slice(0, 8)
+        .map((err) => `<div>Row ${err.row}: ${esc(err.message)}</div>`)
+        .join('')}${sheet.errors.length > 8 ? `<div>${sheet.errors.length - 8} more rows skipped.</div>` : ''}</div>`
+    : '';
+  return `<div class="sheet-bg" data-act="close">
+    <div class="sheet" data-sheet>
+      <div class="handle"></div>
+      <h2>Import ${esc(sheet.name || 'CSV')}</h2>
+      ${rows}
+      ${problems}
+      <div class="stack">
+        <button class="solid" type="button" data-act="confirm-import" ${sheet.drafts.length ? '' : 'disabled'}>Add the valid rows</button>
+        <button class="ghost" type="button" data-act="close">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function shell(body) {
+  const saved = book?.updatedAt
+    ? new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Australia/Melbourne' }).format(new Date(book.updatedAt))
+    : null;
+  return `<div class="app">
+    <nav class="nav">
+      ${VIEWS.map((id) => `<button type="button" class="${view === id ? 'active' : ''}" data-view="${id}">${id[0].toUpperCase()}${id.slice(1)}</button>`).join('')}
+    </nav>
+    <div>
+      <header class="top">
+        <div class="brand"><div class="mark">Ft</div><div><h1>Ledger</h1><p>${esc(book?.deskName || 'Futuret3ch')} · Melbourne dates</p></div></div>
+        <button class="ghost" type="button" data-act="lock">Lock</button>
+      </header>
+      <main class="main">${flashMsg ? `<p class="status" role="status">${esc(flashMsg)}</p>` : ''}${body}<p class="foot">Ledger by Futuret3ch. ${saved ? `Saved ${esc(saved)}.` : 'Nothing saved yet.'} Dates use Melbourne time.</p></main>
+    </div>
+    ${sheet?.type === 'bill' ? billSheet() : ''}
+    ${sheet?.type === 'pay' ? paySheet() : ''}
+    ${sheet?.type === 'more' ? moreSheet() : ''}
+    ${sheet?.type === 'import' ? importSheet() : ''}
+  </div>`;
+}
+
+function lockView() {
+  return `<div class="lock"><div class="card">
+    <div class="mark">Ft</div>
+    <p class="note" style="letter-spacing:.14em;text-transform:uppercase;font-weight:680">Futuret3ch</p>
+    <h1>Ledger</h1>
+    <p class="note">Bills and the payments coming up. The desk is locked. Nothing on it is a sample.</p>
+    ${bootError ? `<p class="errors">${esc(bootError)}</p>` : ''}
+    <form id="lock-form">
+      <div class="field"><label for="code">Access code</label><input id="code" type="password" autocomplete="current-password" required /></div>
+      <button class="solid" type="submit" ${busy ? 'disabled' : ''}>Unlock</button>
+    </form>
+  </div></div>${flashMsg ? `<p class="toast" role="status">${esc(flashMsg)}</p>` : ''}`;
+}
+
+function render() {
+  const focus = document.activeElement;
+  const focusId = focus?.id || '';
+  const caret = focus?.selectionStart;
+  if (!ready) {
+    root.innerHTML = `<div class="lock"><div class="card"><div class="mark">Ft</div><h1>Ledger</h1><p class="note">Opening the desk…</p></div></div>`;
+    return;
+  }
+  if (!authed || !book) {
+    root.innerHTML = lockView();
+    return;
+  }
+  let body = dueView();
+  if (view === 'schedule') body = scheduleView();
+  if (view === 'bills') body = billsView();
+  if (view === 'paid') body = paidView();
+  root.innerHTML = shell(body);
+  if (focusId) {
+    const el = document.getElementById(focusId);
+    if (el) {
+      el.focus();
+      if (typeof caret === 'number' && el.setSelectionRange) {
+        try {
+          el.setSelectionRange(caret, caret);
+        } catch {
+          /* date inputs */
+        }
+      }
+    }
+  }
+}
+
+function readBill() {
+  const existing = sheet?.billId ? book.bills.find((bill) => bill.id === sheet.billId) : null;
+  const amountCents = dollarsToCents(document.getElementById('amount').value);
+  if (amountCents == null) return { error: 'Enter the amount in dollars, like 89.00' };
+  return {
+    bill: {
+      id: existing?.id || nid('bill'),
+      direction: document.querySelector('input[name="direction"]:checked')?.value || 'out',
+      vendor: document.getElementById('vendor').value,
+      title: document.getElementById('title').value,
+      category: document.getElementById('category').value,
+      amountCents,
+      gstMode: document.getElementById('gst').value,
+      startsOn: document.getElementById('starts').value,
+      recurrence: document.getElementById('repeats').value,
+      endsOn: document.getElementById('ends').value || null,
+      reference: document.getElementById('reference').value,
+      notes: document.getElementById('notes').value,
+      paused: existing ? Boolean(document.getElementById('paused')?.checked) : false,
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
+
+function saveBill(event) {
+  event.preventDefault();
+  const { bill, error } = readBill();
+  if (error) {
+    flash(error);
+    render();
+    return;
+  }
+  const twin = book.bills.find(
+    (other) =>
+      other.id !== bill.id &&
+      !other.paused &&
+      other.direction === bill.direction &&
+      other.vendor.trim().toLowerCase() === bill.vendor.trim().toLowerCase() &&
+      other.recurrence === bill.recurrence &&
+      other.amountCents === bill.amountCents
+  );
+  if (twin && !confirm(`There is already a ${RECURRENCE_LABEL[bill.recurrence].toLowerCase()} ${bill.vendor.trim()} bill for this amount. Save this one too?`)) {
+    return;
+  }
+  const bills = sheet?.billId ? book.bills.map((item) => (item.id === bill.id ? bill : item)) : [...book.bills, bill];
+  push({ ...book, bills }, sheet?.billId ? 'Bill updated' : 'Bill added');
+}
+
+function savePayment(event) {
+  event.preventDefault();
+  const item = findItem(sheet.billId, sheet.when);
+  if (!item || item.skipped) return;
+  const amountCents = dollarsToCents(document.getElementById('pay-amount').value);
+  const paidOn = document.getElementById('pay-on').value;
+  if (amountCents == null || amountCents <= 0) {
+    flash('Enter the amount that moved.');
+    render();
+    return;
+  }
+  if (!paidOn) {
+    flash('Enter the date it moved.');
+    render();
+    return;
+  }
+  const payment = {
+    id: nid('pay'),
+    billId: item.billId,
+    occurrenceDate: item.originalDate,
+    paidOn,
+    amountCents,
+    method: document.getElementById('pay-method').value,
+    reference: document.getElementById('pay-ref').value,
+    createdAt: new Date().toISOString(),
+  };
+  push({ ...book, payments: [...book.payments, payment] }, item.direction === 'in' ? 'Receipt recorded' : 'Payment recorded');
+}
+
+function saveMore(event) {
+  event.preventDefault();
+  const item = findItem(sheet.billId, sheet.when);
+  const bill = book.bills.find((entry) => entry.id === sheet.billId);
+  if (!item || !bill) return;
+  const moveTo = document.getElementById('move-to').value;
+  const amountCents = dollarsToCents(document.getElementById('one-amount').value);
+  if (!moveTo) {
+    flash('Choose the date.');
+    render();
+    return;
+  }
+  if (amountCents == null) {
+    flash('Enter the amount for this date.');
+    render();
+    return;
+  }
+  const next = withAdjustment(item.billId, item.originalDate, {
+    skip: false,
+    moveTo: moveTo === item.originalDate ? null : moveTo,
+    amountCents: amountCents === bill.amountCents ? null : amountCents,
+  });
+  push(next, 'That date was updated');
+}
+
+root.addEventListener('click', (event) => {
+  const target = event.target.closest('[data-view],[data-act]');
+  if (!target || target.closest('form') && target.type === 'submit') return;
+  if (target.dataset.view) {
+    view = target.dataset.view;
+    sheet = null;
+    history.replaceState(null, '', `#${view}`);
+    render();
+    return;
+  }
+  const act = target.dataset.act;
+  if (!act) return;
+  if (act === 'close' && event.target !== target && !target.classList.contains('ghost')) return;
+  if (act === 'close') {
+    sheet = null;
+    render();
+    return;
+  }
+  if (act === 'lock') {
+    lock();
+    return;
+  }
+  if (act === 'add') {
+    sheet = { type: 'bill' };
+    render();
+    return;
+  }
+  if (act === 'edit') {
+    sheet = { type: 'bill', billId: target.dataset.bill };
+    render();
+    return;
+  }
+  if (act === 'pay') {
+    sheet = { type: 'pay', billId: target.dataset.bill, when: target.dataset.when };
+    render();
+    return;
+  }
+  if (act === 'more') {
+    sheet = { type: 'more', billId: target.dataset.bill, when: target.dataset.when };
+    render();
+    return;
+  }
+  if (act === 'pause') {
+    const bills = book.bills.map((bill) => (bill.id === target.dataset.bill ? { ...bill, paused: !bill.paused, updatedAt: new Date().toISOString() } : bill));
+    const paused = bills.find((bill) => bill.id === target.dataset.bill)?.paused;
+    push({ ...book, bills }, paused ? 'Future dates paused' : 'Bill resumed');
+    return;
+  }
+  if (act === 'delete') {
+    const bill = book.bills.find((item) => item.id === target.dataset.bill);
+    const count = book.payments.filter((payment) => payment.billId === bill?.id).length;
+    const extra = count ? ` This also removes ${count} recorded payment${count === 1 ? '' : 's'}.` : '';
+    if (!bill || !confirm(`Remove ${bill.vendor} — ${bill.title}?${extra}`)) return;
+    push(
+      {
+        ...book,
+        bills: book.bills.filter((item) => item.id !== bill.id),
+        payments: book.payments.filter((payment) => payment.billId !== bill.id),
+        adjustments: book.adjustments.filter((adj) => adj.billId !== bill.id),
+      },
+      'Bill removed'
+    );
+    return;
+  }
+  if (act === 'unpay') {
+    const payment = book.payments.find((item) => item.id === target.dataset.pay);
+    if (!payment || !confirm('Remove this recorded payment? The date becomes open again.')) return;
+    push({ ...book, payments: book.payments.filter((item) => item.id !== payment.id) }, 'Payment removed');
+    return;
+  }
+  if (act === 'skip') {
+    const item = findItem(target.dataset.bill, target.dataset.when);
+    if (!item) return;
+    const next = item.skipped
+      ? withAdjustment(item.billId, item.originalDate, { skip: false })
+      : withAdjustment(item.billId, item.originalDate, { skip: true, moveTo: null });
+    push(next, item.skipped ? 'Date put back' : 'Date skipped');
+    return;
+  }
+  if (act === 'save-desk') {
+    push({ ...book, deskName: document.getElementById('desk').value }, 'Desk name saved');
+    return;
+  }
+  if (act === 'export-bills') {
+    download('ledger-bills.csv', billsToCsv(book.bills), 'text/csv');
+    return;
+  }
+  if (act === 'template') {
+    download('ledger-bills-blank.csv', CSV_TEMPLATE, 'text/csv');
+    return;
+  }
+  if (act === 'export-schedule') {
+    const items = knownItems(horizon).filter((item) => item.date >= today() && item.date <= addDays(today(), horizon));
+    const rows = [['date', 'direction', 'vendor', 'title', 'category', 'status', 'total', 'gst', 'paid', 'remaining', 'reference']];
+    for (const item of items) {
+      rows.push([
+        item.date,
+        item.direction,
+        item.vendor,
+        item.title,
+        item.category,
+        itemStatus(item, today()),
+        (item.total / 100).toFixed(2),
+        (item.gst / 100).toFixed(2),
+        (item.paidCents / 100).toFixed(2),
+        (item.remainingCents / 100).toFixed(2),
+        item.reference,
+      ]);
+    }
+    download('ledger-schedule.csv', toCsv(rows), 'text/csv');
+    return;
+  }
+  if (act === 'export-paid') {
+    const rows = [['paid_on', 'vendor', 'title', 'occurrence_date', 'amount', 'method', 'reference']];
+    for (const payment of book.payments) {
+      const bill = book.bills.find((item) => item.id === payment.billId);
+      rows.push([
+        payment.paidOn,
+        bill?.vendor || '',
+        bill?.title || '',
+        payment.occurrenceDate,
+        (payment.amountCents / 100).toFixed(2),
+        payment.method,
+        payment.reference || '',
+      ]);
+    }
+    download('ledger-payments.csv', toCsv(rows), 'text/csv');
+    return;
+  }
+  if (act === 'export-json') {
+    download(
+      'ledger-backup.json',
+      JSON.stringify({ product: 'futuret3ch-ledger', exportedAt: new Date().toISOString(), book }, null, 2),
+      'application/json'
+    );
+    return;
+  }
+  if (act === 'pick-csv' || act === 'pick-json') {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = act === 'pick-csv' ? '.csv,text/csv' : '.json,application/json';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      if (act === 'pick-csv') {
+        const { drafts, errors } = draftsFromCsv(text);
+        sheet = { type: 'import', drafts, errors, name: file.name };
+        render();
+        return;
+      }
+      try {
+        const parsed = JSON.parse(text);
+        const raw = parsed.book || parsed;
+        if (!confirm('Replace every bill and payment on this desk with that file?')) return;
+        const normalized = normalizeBook({ ...raw, version: book.version });
+        push(normalized, 'Desk replaced from the backup');
+      } catch (err) {
+        flash(err.message || 'That backup could not be read');
+        render();
+      }
+    };
+    input.click();
+    return;
+  }
+  if (act === 'confirm-import') {
+    const now = new Date().toISOString();
+    const bills = [
+      ...book.bills,
+      ...sheet.drafts.map((draft) => ({
+        ...draft,
+        id: nid('bill'),
+        createdAt: now,
+        updatedAt: now,
+      })),
+    ];
+    push({ ...book, bills }, `Added ${sheet.drafts.length} bill${sheet.drafts.length === 1 ? '' : 's'}`);
+  }
+});
+
+root.addEventListener('submit', (event) => {
+  if (event.target.id === 'lock-form') {
+    event.preventDefault();
+    unlock();
+  } else if (event.target.id === 'bill-form') saveBill(event);
+  else if (event.target.id === 'pay-form') savePayment(event);
+  else if (event.target.id === 'more-form') saveMore(event);
+});
+
+root.addEventListener('input', (event) => {
+  if (event.target.id === 'q') {
+    query = event.target.value;
+    render();
+  }
+});
+
+root.addEventListener('change', (event) => {
+  if (event.target.id === 'cat') {
+    category = event.target.value;
+    render();
+  }
+  if (event.target.id === 'horizon') {
+    horizon = Number(event.target.value);
+    render();
+  }
+});
+
+boot();
