@@ -1,4 +1,5 @@
 import { bestMatch, draftsFromStatement, signedAmount } from '../lib/bank.js';
+import { auMobile } from '../lib/basiq.js';
 import { BANK_TYPES, bankById, searchBanks } from '../lib/banks-au.js';
 import { CATEGORIES, GST_LABEL, METHOD_LABEL, METHODS, PROFILE_KIND_LABEL, PROFILE_KINDS, RECURRENCE_LABEL, RECURRENCES, STATES, usesOrg } from '../lib/catalog.js';
 import { CSV_TEMPLATE, billsToCsv, draftsFromCsv, toCsv } from '../lib/csv.js';
@@ -534,6 +535,45 @@ function paidView() {
       .join('')}`;
 }
 
+function startBankFeed() {
+  const email = document.getElementById('bank-email')?.value || currentProfile().email || '';
+  const mobile = document.getElementById('bank-mobile')?.value || currentProfile().phone || '';
+  if (!email.includes('@')) {
+    flash('Enter the email on this desk, then Get bank feeds.');
+    render();
+    return;
+  }
+  if (!auMobile(mobile)) {
+    flash('Enter an Australian mobile (04xx) so the bank can send a code.');
+    render();
+    return;
+  }
+  busy = true;
+  flash('');
+  render();
+  request('/api/bank', { method: 'POST', body: { action: 'connect', email, mobile } })
+    .then(({ res, data }) => {
+      if (!res.ok) {
+        busy = false;
+        flash(data.error || 'Could not start the feed. Import a statement for this account.');
+        render();
+        return;
+      }
+      if (data.url) {
+        window.location.assign(data.url);
+        return;
+      }
+      busy = false;
+      flash('Bank login did not return a consent page. Import a statement.');
+      render();
+    })
+    .catch(() => {
+      busy = false;
+      flash('Could not start the feed. Import a statement for this account.');
+      render();
+    });
+}
+
 function fillBank() {
   const el = document.getElementById('bank-status');
   const box = document.getElementById('bank-box');
@@ -551,7 +591,6 @@ function fillBank() {
         return;
       }
       const bank = data.bank || {};
-      const profile = currentProfile();
       const names = (bank.connections || []).map((row) => row.institution).filter(Boolean).join(', ');
       if (names) el.textContent = `Connected: ${names}.`;
       else if (bank.connected) el.textContent = 'A Basiq user sits on this desk. Connect a bank to pick the institution.';
@@ -564,17 +603,15 @@ function fillBank() {
           return `<article class="pay"><b>${esc(conn.institution || 'Bank')}</b><div class="muted">${esc(conn.status || '')}${accounts ? ' · ' + esc(accounts) : ''}</div></article>`;
         })
         .join('');
-      box.innerHTML = `<p class="note">You log in at the bank on Basiq. When you come back, pull statements. If Basiq says Connections not enabled, open dashboard.basiq.io → your app → Customise UI → Institutions, tick the banks (Basiq sandbox is enough to test), set brand name and redirect to https://ledger-futuret3ch.vercel.app/app?bank=return, then Save.</p>
-      <div class="pair">
-        <div class="field"><label for="bank-email">Email</label><input id="bank-email" value="${esc(bank.email || profile.email)}" /></div>
-        <div class="field"><label for="bank-mobile">Mobile</label><input id="bank-mobile" value="${esc(bank.mobile || profile.phone)}" /></div>
-      </div>
-      ${connections}
-      <div class="stack" style="margin-top:12px">
-        <button class="solid" type="button" data-act="connect-bank">Connect a bank</button>
-        ${bank.connected ? `<button class="ghost" type="button" data-act="sync-bank">Pull statements</button>` : ''}
-        ${bank.connected ? `<button class="ghost danger" type="button" data-act="disconnect-bank">Disconnect</button>` : ''}
-      </div>`;
+      box.innerHTML = `${connections}
+      ${
+        bank.connected
+          ? `<div class="stack" style="margin-top:12px">
+        <button class="ghost" type="button" data-act="sync-bank">Pull statements</button>
+        <button class="ghost danger" type="button" data-act="disconnect-bank">Disconnect</button>
+      </div>`
+          : `<p class="note">A live feed still needs Basiq to enable Connections on this API key. Until then, import a statement on the account above.</p>`
+      }`;
     })
     .catch(() => {
       el.textContent = 'Could not reach bank login.';
@@ -710,6 +747,10 @@ function bankDesk() {
     <h3 style="margin-top:18px">Add bank account</h3>
     ${search}
     <p id="bank-status">Checking bank login…</p>
+    <div class="pair">
+      <div class="field"><label for="bank-email">Email for the feed</label><input id="bank-email" value="${esc(book.bank?.email || currentProfile().email)}" /></div>
+      <div class="field"><label for="bank-mobile">Australian mobile</label><input id="bank-mobile" value="${esc(book.bank?.mobile || currentProfile().phone)}" placeholder="0412 345 678" /></div>
+    </div>
     <div id="bank-box"></div>
   </div>`;
 }
@@ -1736,40 +1777,8 @@ root.addEventListener('click', (event) => {
     );
     return;
   }
-  if (act === 'get-bank-feed') {
-    flash('A live feed uses Basiq. If Basiq says connections are not enabled, import a statement for this account.');
-    const connect = document.querySelector('[data-act="connect-bank"]');
-    if (connect) connect.click();
-    else render();
-    return;
-  }
-  if (act === 'connect-bank') {
-    const email = document.getElementById('bank-email')?.value || '';
-    const mobile = document.getElementById('bank-mobile')?.value || '';
-    busy = true;
-    flash('');
-    render();
-    request('/api/bank', { method: 'POST', body: { action: 'connect', email, mobile } })
-      .then(({ res, data }) => {
-        if (!res.ok) {
-          busy = false;
-          flash(data.error || 'Could not start bank login');
-          render();
-          return;
-        }
-        if (data.url) {
-          window.location.assign(data.url);
-          return;
-        }
-        busy = false;
-        flash('Bank login did not return a consent page');
-        render();
-      })
-      .catch(() => {
-        busy = false;
-        flash('Could not start bank login');
-        render();
-      });
+  if (act === 'get-bank-feed' || act === 'connect-bank') {
+    startBankFeed();
     return;
   }
   if (act === 'sync-bank') {
