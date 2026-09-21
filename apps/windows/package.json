@@ -2,7 +2,7 @@
   "name": "jax-windows",
   "version": "1.0.0",
   "private": true,
-  "description": "JAX for Windows. Sideload or submit the appx to Microsoft Store.",
+  "description": "Quill for Windows. Sideload or submit the appx to Microsoft Store.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -11,7 +11,7 @@
   "author": "Futuret3ch",
   "build": {
     "appId": "au.com.futuret3ch.jax",
-    "productName": "JAX",
+    "productName": "Quill",
     "win": {
       "target": ["appx", "nsis"]
     },
@@ -19,7 +19,7 @@
       "identityName": "Futuret3ch.JAX",
       "publisher": "CN=Futuret3ch",
       "publisherDisplayName": "Futuret3ch",
-      "displayName": "JAX"
+      "displayName": "Quill"
     }
   },
   "devDependencies": {

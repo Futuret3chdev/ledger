@@ -15,7 +15,7 @@ function esc(s) {
 const SOLO = [
   'Invoices and quotes',
   'Bills and repeats on one card',
-  'Bank statement import and JAX matching',
+  'Bank statement import and Quill matching',
   'GST and BAS figures',
   'Live reports',
   'Payroll worksheet and super',
@@ -42,14 +42,14 @@ const HIVE = [
 ];
 
 const FEATS = [
-  ['JAX matching', 'Statement lines match bills when the amount, the name, and the date line up.'],
+  ['Quill matching', 'Statement lines match bills when the amount, the name, and the date line up.'],
   ['Bills and repeats', 'A monthly bill stays on one card. Pay or move a single date from there.'],
   ['Invoices and quotes', 'Send what they owe you. Print it with your ABN. Mark it paid when it lands.'],
   ['GST and BAS', 'GST in, GST out, and the BAS figures for the quarter.'],
   ['Bank statements', 'Drop in a statement and match the lines.'],
   ['Payroll', 'Gross, tax withheld, and super on a worksheet.'],
   ['Kilometres', 'ATO cents per kilometre, capped at 5,000 km.'],
-  ['On your phone and computer', 'JAX has an iOS Xcode project, a Mac app, and a Windows app you can run and pack for the Microsoft Store.'],
+  ['On your phone and computer', 'Quill has an iOS Xcode project, a Mac app, and a Windows app you can run and pack for the Microsoft Store.'],
 ];
 
 const MT_HOME = 'https://memetorrent.futuret3ch.com.au';
@@ -86,9 +86,9 @@ export function siteView() {
   return `<div class="site">
     <header class="site-bar">
       <div class="site-brand">
-        <a href="/"><img class="mark" src="/logo.png" width="512" height="512" alt="JAX"/></a>
+        <a href="/"><img class="mark" src="/logo.png" width="512" height="512" alt="Quill"/></a>
         <div>
-          <b>JAX by <a href="${FT_HOME}">Futuret3ch</a> and <a href="${MT_HOME}">MemeTorrent</a></b>
+          <b>Quill by <a href="${FT_HOME}">Futuret3ch</a> and <a href="${MT_HOME}">MemeTorrent</a></b>
           <div class="site-eco">for the <a href="${MT_HOME}">MT ECO SYSTEM</a></div>
         </div>
       </div>
@@ -173,14 +173,14 @@ export function siteView() {
       <section id="keepers">
         <div class="kicker site-eco">Keepers</div>
         <h2 style="font-family:var(--serif);font-size:40px;letter-spacing:-.04em">Accountants and bookkeepers.</h2>
-        <p style="color:#b7c4bc;max-width:52ch">Run a client on JAX. One desk. Their ABN on the print. Their BAS figures from the bills you entered. No partner portal, no extra product names.</p>
+        <p style="color:#b7c4bc;max-width:52ch">Run a client on Quill. One desk. Their ABN on the print. Their BAS figures from the bills you entered. No partner portal, no extra product names.</p>
         <div class="packs">
           <article class="pack"><h3>Accountants</h3><p>Open Tax. G1, 1A, 1B for the quarter. Export the BAS CSV. Print invoices with the client ABN.</p></article>
-          <article class="pack"><h3>Bookkeepers</h3><p>Enter bills, import the statement, let JAX match the lines, mark paid when the money moved.</p></article>
+          <article class="pack"><h3>Bookkeepers</h3><p>Enter bills, import the statement, let Quill match the lines, mark paid when the money moved.</p></article>
           <article class="pack"><h3>Firms</h3><p>Set the profile to company, partnership, or trust. Keep projects on the bills. Put the house on the Roll with no email or phone.</p></article>
         </div>
         <p style="color:#b7c4bc;max-width:52ch">A repeating bill stays on one card. Dates use Melbourne time. Kilometres use the ATO rate for the day of the trip.</p>
-        <p style="margin:18px 0 28px"><a class="go" href="/app" style="display:inline-flex;min-height:44px;border-radius:999px;padding:0 18px;align-items:center;background:#7dffb1;color:#06140e;text-decoration:none;font-weight:680">Open JAX</a></p>
+        <p style="margin:18px 0 28px"><a class="go" href="/app" style="display:inline-flex;min-height:44px;border-radius:999px;padding:0 18px;align-items:center;background:#7dffb1;color:#06140e;text-decoration:none;font-weight:680">Open Quill</a></p>
         <div class="packs">
           <article class="pack">
             <h3>Sign up as a keeper</h3>
@@ -200,9 +200,9 @@ export function siteView() {
           </article>
           <article class="pack">
             <h3>Ask a keeper</h3>
-            <p>The message goes to that keeper’s inbox. If the list is empty, it still saves for JAX.</p>
+            <p>The message goes to that keeper’s inbox. If the list is empty, it still saves for Quill.</p>
             <form id="ask-form">
-              <div class="field"><label for="a-keeper">Keeper</label><select id="a-keeper"><option value="">Anyone at JAX</option></select></div>
+              <div class="field"><label for="a-keeper">Keeper</label><select id="a-keeper"><option value="">Anyone at Quill</option></select></div>
               <div class="field"><label for="a-name">Your name</label><input id="a-name" required /></div>
               <div class="field"><label for="a-email">Your email</label><input id="a-email" type="email" required /></div>
               <div class="field"><label for="a-phone">Phone</label><input id="a-phone" /></div>
@@ -266,15 +266,15 @@ export function siteView() {
       <footer class="site-foot">
         <div class="foot-grid">
           <div>
-            <b>JAX</b>
-            <a href="#features">How JAX works</a>
+            <b>Quill</b>
+            <a href="#features">How Quill works</a>
             <a href="#roll">The Roll</a>
             <a href="#find">Find a keeper</a>
             <a href="#plans">Plans</a>
             <a href="/app">Open the desk</a>
           </div>
           <div>
-            <b>JAX for</b>
+            <b>Quill for</b>
             <a href="#keepers">Accountants and bookkeepers</a>
             <a href="#plans">Self-employed</a>
             <a href="#plans">Businesses</a>
@@ -289,7 +289,7 @@ export function siteView() {
             <a href="mailto:Support@futuret3ch.com.au">Support</a>
           </div>
         </div>
-        <p style="margin-top:22px">JAX by Futuret3ch and MemeTorrent for the MT ECO SYSTEM.</p>
+        <p style="margin-top:22px">Quill by Futuret3ch and MemeTorrent for the MT ECO SYSTEM.</p>
         <p>© ${esc(year)} MT-ECO SYSTEM — Developed by Futuret3ch and MemeTorrent. All core components self-hosted and self-built.</p>
         <div class="foot-links">${MT_FOOT.map(([label, href]) => `<a href="${esc(href)}">${esc(label)}</a>`).join('')}</div>
         <p class="foot-note">Built here. Hosted here. Keys stay with you.</p>
@@ -339,7 +339,7 @@ export function bindSite() {
   const paintKeepers = (keepers) => {
     if (askSelect) {
       askSelect.innerHTML =
-        '<option value="">Anyone at JAX</option>' +
+        '<option value="">Anyone at Quill</option>' +
         keepers.map((k) => `<option value="${esc(k.id)}">${esc(k.name)}${k.firm ? ' · ' + esc(k.firm) : ''}</option>`).join('');
     }
     if (!list) return;

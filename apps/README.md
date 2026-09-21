@@ -1,4 +1,4 @@
-# JAX native shells
+# Quill native shells
 
 These open the live desk at `https://ledger-futuret3ch.vercel.app/app`. They are not listed on the stores yet. You can run them now.
 
@@ -7,7 +7,7 @@ These open the live desk at `https://ledger-futuret3ch.vercel.app/app`. They are
 On a Mac:
 
 ```bash
-open apps/ios/JAX.xcodeproj
+open apps/ios/Quill.xcodeproj
 ```
 
 Select an iPhone simulator, press Run. Set your Apple team under Signing if you want a device.
@@ -15,7 +15,7 @@ Select an iPhone simulator, press Run. Set your Apple team under Signing if you 
 ## Mac
 
 ```bash
-open apps/macos/JAX.xcodeproj
+open apps/macos/Quill.xcodeproj
 ```
 
 Run on My Mac.
@@ -28,7 +28,7 @@ npm install
 npm start
 ```
 
-That opens JAX on Windows. To build Store packages:
+That opens Quill on Windows. To build Store packages:
 
 ```bash
 npm run pack

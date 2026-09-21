@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Post bank statement lines into JAX.",
+  "description": "Post bank statement lines into Quill.",
   "main": "src/index.js",
   "bin": {
     "jax-feed": "./bin/jax-feed.mjs"

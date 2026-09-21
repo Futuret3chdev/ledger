@@ -2,7 +2,7 @@
   "name": "ledger",
   "version": "1.0.0",
   "private": true,
-  "description": "JAX by Futuret3ch and MemeTorrent — books for the MT ECO SYSTEM.",
+  "description": "Quill by Futuret3ch and MemeTorrent — books for the MT ECO SYSTEM.",
   "type": "module",
   "scripts": {
     "dev": "vite",

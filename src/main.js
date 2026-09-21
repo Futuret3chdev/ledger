@@ -126,7 +126,7 @@ async function boot() {
   try {
     const session = await request('/api/session');
     if (session.res.status === 503) {
-      bootError = session.data.error || 'JAX access is not configured';
+      bootError = session.data.error || 'Quill access is not configured';
       ready = true;
       render();
       return;
@@ -552,7 +552,7 @@ function fillBank() {
       const names = (bank.connections || []).map((row) => row.institution).filter(Boolean).join(', ');
       if (names) el.textContent = `Connected: ${names}.`;
       else if (bank.connected) el.textContent = 'A Basiq user sits on this desk. Connect a bank to pick the institution.';
-      else el.textContent = 'Basiq is on. Connect a bank opens their consent page. JAX does not keep the bank password.';
+      else el.textContent = 'Basiq is on. Connect a bank opens their consent page. Quill does not keep the bank password.';
       const connections = (bank.connections || [])
         .map((conn) => {
           const accounts = (conn.accounts || [])
@@ -618,7 +618,7 @@ function fillPractice() {
       asks
         .map((ask) => {
           const keeper = keepers.find((k) => k.id === ask.keeperId);
-          return `<article class="pay"><div class="when">${esc(ask.createdAt?.slice(0, 10) || '')} · to ${esc(keeper?.name || 'JAX')}</div><b>${esc(ask.name)}</b><div class="muted">${esc(ask.email)} ${esc(ask.phone)}</div><div class="muted">${esc(ask.message)}</div></article>`;
+          return `<article class="pay"><div class="when">${esc(ask.createdAt?.slice(0, 10) || '')} · to ${esc(keeper?.name || 'Quill')}</div><b>${esc(ask.name)}</b><div class="muted">${esc(ask.email)} ${esc(ask.phone)}</div><div class="muted">${esc(ask.message)}</div></article>`;
         })
         .join('');
   });
@@ -874,8 +874,8 @@ function deskView() {
         <div class="field"><label for="phone">Phone</label><input id="phone" value="${esc(profile.phone)}" /></div>
       </div>
       <div class="field"><label for="email">Email</label><input id="email" value="${esc(profile.email)}" /></div>
-      <label class="check"><input id="jax-auto" type="checkbox" ${profile.jaxAuto ? 'checked' : ''}/> Apply JAX matches at 0.95 or above when a statement is imported</label>
-      <p class="note">JAX here is a rule: same remaining amount, vendor name in the description, date within three days. It is not a trained model and it does not talk to a bank.</p>
+      <label class="check"><input id="jax-auto" type="checkbox" ${profile.jaxAuto ? 'checked' : ''}/> Apply Quill matches at 0.95 or above when a statement is imported</label>
+      <p class="note">Quill here is a rule: same remaining amount, vendor name in the description, date within three days. It is not a trained model and it does not talk to a bank.</p>
       ${
         effectiveKind() === 'partnership'
           ? `<h3>Partners</h3>
@@ -913,7 +913,7 @@ function deskView() {
     </div>
     <div class="group">
       <h3>Bank statements</h3>
-      <p class="note">Import a CSV with date, description, and amount. Money out is negative. High-confidence matches can be applied by JAX.</p>
+      <p class="note">Import a CSV with date, description, and amount. Money out is negative. High-confidence matches can be applied by Quill.</p>
       <button class="solid" type="button" data-act="pick-statement">Import statement CSV</button>
       ${
         unmatched.length
@@ -923,7 +923,7 @@ function deskView() {
                 return `<article class="pay">
                   <div class="when">${esc(longDate(txn.postedOn))} · ${money(txn.amountCents)}</div>
                   <b>${esc(txn.description)}</b>
-                  ${guess.item ? `<div class="muted">JAX ${guess.score.toFixed(2)} · ${esc(guess.item.vendor)} ${esc(longDate(guess.item.date))}</div>` : `<div class="muted">No open bill looks close.</div>`}
+                  ${guess.item ? `<div class="muted">Quill ${guess.score.toFixed(2)} · ${esc(guess.item.vendor)} ${esc(longDate(guess.item.date))}</div>` : `<div class="muted">No open bill looks close.</div>`}
                   ${
                     guess.item
                       ? `<div class="actions"><button class="solid" type="button" data-act="match-txn" data-txn="${esc(txn.id)}" data-bill="${esc(guess.item.billId)}" data-when="${esc(guess.item.originalDate)}">Match</button></div>`
@@ -941,7 +941,7 @@ function deskView() {
       <div id="practice-inbox">Loading…</div>
     </div>
     <div class="group">
-      <h3>Install JAX</h3>
+      <h3>Install Quill</h3>
       <p>The same desk in a native shell. iOS first in Xcode. Mac in Xcode. Windows with Electron, then pack an appx for the Microsoft Store.</p>
       <p class="note">iPhone: on a Mac open <span class="muted">apps/ios/JAX.xcodeproj</span> and Run on a simulator.<br/>Mac: open <span class="muted">apps/macos/JAX.xcodeproj</span> and Run on My Mac.<br/>Windows: in <span class="muted">apps/windows</span> run npm install && npm start. npm run pack builds the Store appx.</p>
       <p class="note">Feed SDK: <span class="muted">sdk/jax-feed</span>. Ping and post with LEDGER_FEED_TOKEN. Lines land on Desk for matching.</p>
@@ -1077,10 +1077,10 @@ function shell(body) {
     </nav>
     <div>
       <header class="top">
-        <div class="brand"><img class="mark" src="/logo.png" width="512" height="512" alt="JAX"/><div><h1>JAX</h1><p>${esc(book?.deskName || 'MT ECO SYSTEM')} · Melbourne dates</p></div></div>
+        <div class="brand"><img class="mark" src="/logo.png" width="512" height="512" alt="Quill"/><div><h1>Quill</h1><p>${esc(book?.deskName || 'MT ECO SYSTEM')} · Melbourne dates</p></div></div>
         <button class="ghost" type="button" data-act="lock">Log out</button>
       </header>
-      <main class="main">${flashMsg ? `<p class="status" role="status">${esc(flashMsg)}</p>` : ''}${body}<p class="foot">JAX by Futuret3ch and MemeTorrent for the MT ECO SYSTEM. ${saved ? `Saved ${esc(saved)}.` : 'Nothing saved yet.'} Dates use Melbourne time.</p></main>
+      <main class="main">${flashMsg ? `<p class="status" role="status">${esc(flashMsg)}</p>` : ''}${body}<p class="foot">Quill by Futuret3ch and MemeTorrent for the MT ECO SYSTEM. ${saved ? `Saved ${esc(saved)}.` : 'Nothing saved yet.'} Dates use Melbourne time.</p></main>
     </div>
     ${sheet?.type === 'bill' ? billSheet() : ''}
     ${sheet?.type === 'pay' ? paySheet() : ''}
@@ -1091,9 +1091,9 @@ function shell(body) {
 
 function lockView() {
   return `<div class="lock"><div class="card">
-    <img class="mark" src="/logo.png" width="512" height="512" alt="JAX"/>
+    <img class="mark" src="/logo.png" width="512" height="512" alt="Quill"/>
     <p class="note" style="letter-spacing:.14em;text-transform:uppercase;font-weight:680">Futuret3ch · MemeTorrent $MT</p>
-    <h1>JAX</h1>
+    <h1>Quill</h1>
     <p class="note">For self-employed people, businesses, and corporations. The desk is locked.</p>
     <p class="note"><a href="/" style="color:inherit">Back to the site</a></p>
     ${bootError ? `<p class="errors">${esc(bootError)}</p>` : ''}
@@ -1109,7 +1109,7 @@ function render() {
   const focusId = focus?.id || '';
   const caret = focus?.selectionStart;
   if (!ready) {
-    root.innerHTML = `<div class="lock"><div class="card"><img class="mark" src="/logo.png" width="512" height="512" alt="JAX"/><h1>JAX</h1><p class="note">Opening…</p></div></div>`;
+    root.innerHTML = `<div class="lock"><div class="card"><img class="mark" src="/logo.png" width="512" height="512" alt="Quill"/><h1>Quill</h1><p class="note">Opening…</p></div></div>`;
     return;
   }
   if (!onAppPath()) {
@@ -1828,15 +1828,15 @@ root.addEventListener('click', (event) => {
       render();
       return;
     }
-    win.document.write(`<!DOCTYPE html><html lang="en-AU"><head><meta charset="utf-8"><title>JAX ${bill.direction === 'in' ? 'Invoice' : 'Bill'}</title>
+    win.document.write(`<!DOCTYPE html><html lang="en-AU"><head><meta charset="utf-8"><title>Quill ${bill.direction === 'in' ? 'Invoice' : 'Bill'}</title>
       <style>body{font-family:Georgia,serif;max-width:640px;margin:40px auto;color:#1b1914}h1{font-size:28px}table{width:100%;border-collapse:collapse}td{padding:8px 0;border-bottom:1px solid #ddd}</style></head><body>
-      <p>JAX · Futuret3ch and MemeTorrent · MT ECO SYSTEM</p>
+      <p>Quill · Futuret3ch and MemeTorrent · MT ECO SYSTEM</p>
       <h1>${bill.direction === 'in' ? 'Invoice' : 'Bill'}</h1>
       <p>${profile.legalName || book.deskName}<br>${profile.abn ? 'ABN ' + profile.abn : ''}<br>${profile.address} ${profile.suburb} ${profile.state} ${profile.postcode}</p>
       <p>To ${bill.vendor}<br>${bill.title}<br>Due ${bill.startsOn}</p>
       <table><tr><td>${bill.title}</td><td style="text-align:right">${formatAud(gst.total)}</td></tr>
       <tr><td>GST</td><td style="text-align:right">${formatAud(gst.gst)}</td></tr></table>
-      <p>This is from the JAX desk. It is not a lodged BAS.</p>
+      <p>This is from the Quill desk. It is not a lodged BAS.</p>
       </body></html>`);
     win.document.close();
     win.focus();

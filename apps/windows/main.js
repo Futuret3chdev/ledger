@@ -4,7 +4,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1100,
     height: 760,
-    title: 'JAX',
+    title: 'Quill',
     webPreferences: {
       contextIsolation: true,
     },

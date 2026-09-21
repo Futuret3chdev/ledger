@@ -1,5 +1,5 @@
 /**
- * JAX Feed SDK
+ * Quill Feed SDK
  * POST /api/feed with Bearer token.
  * amountCents is signed: money out is negative.
  */
