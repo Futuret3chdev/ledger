@@ -61,6 +61,7 @@ export function siteView() {
       <nav class="site-nav">
         <a href="#plans">Plans</a>
         <a href="#features">Features</a>
+        <a href="#roll">Roll</a>
         <a href="#keepers">Keepers</a>
         <a href="#support">Support</a>
         <a href="/app">Log in</a>
@@ -98,6 +99,44 @@ export function siteView() {
         <h2 style="font-family:var(--serif);font-size:40px;letter-spacing:-.04em">Features</h2>
         <div class="feats">${FEATS.map(([t, d]) => `<div class="feat"><b>${esc(t)}</b><span>${esc(d)}</span></div>`).join('')}</div>
       </section>
+      <section id="roll">
+        <div class="kicker site-eco">The Roll</div>
+        <h2 style="font-family:var(--serif);font-size:40px;letter-spacing:-.04em">Put your house on the roll.</h2>
+        <p style="color:#b7c4bc;max-width:52ch">Name, ABN or ACN, where you work, how many people, a short note. No email. No phone. Ask a keeper if you need to talk.</p>
+        <div class="packs">
+          <article class="pack">
+            <h3>Add yours</h3>
+            <form id="roll-form">
+              <div class="field"><label for="r-kind">I am</label>
+                <select id="r-kind">
+                  <option value="self">Self-employed</option>
+                  <option value="business">Business</option>
+                  <option value="company">Company</option>
+                  <option value="keeper">Keeper</option>
+                </select>
+              </div>
+              <div class="field"><label for="r-name">Name</label><input id="r-name" required /></div>
+              <div class="field"><label for="r-biz">Business name</label><input id="r-biz" /></div>
+              <div class="pair">
+                <div class="field"><label for="r-abn">ABN</label><input id="r-abn" inputmode="numeric" /></div>
+                <div class="field"><label for="r-acn">ACN</label><input id="r-acn" inputmode="numeric" /></div>
+              </div>
+              <div class="pair">
+                <div class="field"><label for="r-city">City</label><input id="r-city" /></div>
+                <div class="field"><label for="r-state">State</label><select id="r-state"><option value="">—</option><option>NSW</option><option>VIC</option><option>QLD</option><option>SA</option><option>WA</option><option>TAS</option><option>NT</option><option>ACT</option></select></div>
+              </div>
+              <div class="field"><label for="r-emp">People</label><input id="r-emp" inputmode="numeric" /></div>
+              <div class="field"><label for="r-roles">Roles in the house</label><input id="r-roles" placeholder="admin, crew, bookkeeper" /></div>
+              <div class="field"><label for="r-ind">Industry</label><input id="r-ind" /></div>
+              <div class="field"><label for="r-look">Looking for</label><input id="r-look" placeholder="keepers, work, staff" /></div>
+              <div class="field"><label for="r-desc">Description</label><textarea id="r-desc" rows="3" required></textarea></div>
+              <button class="go" type="submit" style="margin-top:8px">Put it on the roll</button>
+              <p id="r-out" class="note"></p>
+            </form>
+          </article>
+        </div>
+        <div id="roll-list" class="feats"><p class="note">No profiles yet.</p></div>
+      </section>
       <section id="find"></section>
       <section id="keepers">
         <div class="kicker site-eco">Keepers</div>
@@ -106,7 +145,7 @@ export function siteView() {
         <div class="packs">
           <article class="pack"><h3>Accountants</h3><p>Open Tax. G1, 1A, 1B for the quarter. Export the BAS CSV. Print invoices with the client ABN.</p></article>
           <article class="pack"><h3>Bookkeepers</h3><p>Enter bills, import the statement, let JAX match the lines, mark paid when the money moved.</p></article>
-          <article class="pack"><h3>Firms</h3><p>Set the profile to company, partnership, or trust. Keep projects on the bills. Export the year.</p></article>
+          <article class="pack"><h3>Firms</h3><p>Set the profile to company, partnership, or trust. Keep projects on the bills. Put the house on the Roll with no email or phone.</p></article>
         </div>
         <p style="color:#b7c4bc;max-width:52ch">A repeating bill stays on one card. Dates use Melbourne time. Kilometres use the ATO rate for the day of the trip.</p>
         <p style="margin:18px 0 28px"><a class="go" href="/app" style="display:inline-flex;min-height:44px;border-radius:999px;padding:0 18px;align-items:center;background:#7dffb1;color:#06140e;text-decoration:none;font-weight:680">Open JAX</a></p>
@@ -197,6 +236,7 @@ export function siteView() {
           <div>
             <b>JAX</b>
             <a href="#features">How JAX works</a>
+            <a href="#roll">The Roll</a>
             <a href="#find">Find a keeper</a>
             <a href="#plans">Plans</a>
             <a href="/app">Open the desk</a>
@@ -278,12 +318,24 @@ export function bindSite() {
       )
       .join('');
   };
-  fetch('/api/keepers')
-    .then((res) => res.json())
-    .then((data) => paintKeepers(data.keepers || []))
-    .catch(() => {});
-
-  const postForm = (id, url, body, outId, ok) => {
+  const rollList = document.getElementById('roll-list');
+  const paintRoll = (cards) => {
+    if (!rollList) return;
+    if (!cards.length) {
+      rollList.innerHTML = '<p class="note">No profiles yet.</p>';
+      return;
+    }
+    rollList.innerHTML = cards
+      .map((card) => {
+        const where = [card.city, card.state].filter(Boolean).join(', ');
+        const ids = [card.abn && `ABN ${card.abn}`, card.acn && `ACN ${card.acn}`].filter(Boolean).join(' · ');
+        const people = card.employees ? `${card.employees} people` : '';
+        const bits = [where, ids, people, card.roles, card.industry, card.looking && `Looking for ${card.looking}`].filter(Boolean);
+        return `<div class="feat"><b>${esc(card.businessName || card.name)} · ${esc(card.kind)}</b><span>${esc(card.name)}${bits.length ? '<br>' + esc(bits.join(' · ')) : ''}<br>${esc(card.description)}</span></div>`;
+      })
+      .join('');
+  };
+  const postForm = (id, url, body, outId, ok, refresh) => {
     const form = document.getElementById(id);
     const out = document.getElementById(outId);
     form?.addEventListener('submit', async (event) => {
@@ -297,11 +349,43 @@ export function bindSite() {
       }
       if (out) out.textContent = ok;
       form.reset();
-      const listRes = await fetch('/api/keepers');
-      const listData = await listRes.json().catch(() => ({ keepers: [] }));
-      paintKeepers(listData.keepers || []);
+      if (refresh) await refresh();
     });
   };
+  fetch('/api/roll')
+    .then((res) => res.json())
+    .then((data) => paintRoll(data.roll || []))
+    .catch(() => {});
+  postForm(
+    'roll-form',
+    '/api/roll',
+    () => ({
+      kind: document.getElementById('r-kind').value,
+      name: document.getElementById('r-name').value,
+      businessName: document.getElementById('r-biz').value,
+      abn: document.getElementById('r-abn').value,
+      acn: document.getElementById('r-acn').value,
+      city: document.getElementById('r-city').value,
+      state: document.getElementById('r-state').value,
+      employees: Number(document.getElementById('r-emp').value) || 0,
+      roles: document.getElementById('r-roles').value,
+      industry: document.getElementById('r-ind').value,
+      looking: document.getElementById('r-look').value,
+      description: document.getElementById('r-desc').value,
+    }),
+    'r-out',
+    'On the roll.',
+    async () => {
+      const listRes = await fetch('/api/roll');
+      const listData = await listRes.json().catch(() => ({ roll: [] }));
+      paintRoll(listData.roll || []);
+    }
+  );
+
+  fetch('/api/keepers')
+    .then((res) => res.json())
+    .then((data) => paintKeepers(data.keepers || []))
+    .catch(() => {});
   postForm(
     'keeper-form',
     '/api/keepers',
@@ -316,7 +400,12 @@ export function bindSite() {
       passphrase: document.getElementById('k-pass').value,
     }),
     'k-out',
-    'You are on the list. Use the inbox with your email and passphrase.'
+    'You are on the list. Use the inbox with your email and passphrase.',
+    async () => {
+      const listRes = await fetch('/api/keepers');
+      const listData = await listRes.json().catch(() => ({ keepers: [] }));
+      paintKeepers(listData.keepers || []);
+    }
   );
   postForm(
     'ask-form',
