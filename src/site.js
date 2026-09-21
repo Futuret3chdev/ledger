@@ -68,7 +68,7 @@ export function siteView() {
       <section class="hero">
         <div class="site-eco">By Futuret3ch and MemeTorrent</div>
         <h1>JAX</h1>
-        <p>The books for the MT ECO SYSTEM. Bills, GST, statements, and tax figures from what you actually entered. Nothing on the desk is a sample.</p>
+        <p>For self-employed people, businesses, and corporations.</p>
         <div class="offer">
           <div class="kicker">Limited time only</div>
           ${

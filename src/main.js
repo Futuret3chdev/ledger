@@ -817,7 +817,7 @@ function lockView() {
     <div class="mark">Jx</div>
     <p class="note" style="letter-spacing:.14em;text-transform:uppercase;font-weight:680">Futuret3ch · MemeTorrent</p>
     <h1>JAX</h1>
-    <p class="note">The books for the MT ECO SYSTEM. The desk is locked. Nothing on it is a sample.</p>
+    <p class="note">For self-employed people, businesses, and corporations. The desk is locked.</p>
     <p class="note"><a href="/" style="color:inherit">Back to the site</a></p>
     ${bootError ? `<p class="errors">${esc(bootError)}</p>` : ''}
     <form id="lock-form">
