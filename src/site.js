@@ -36,7 +36,8 @@ const HIVE = [
   'Everything in House',
   '180 day cash coming up',
   'Projects',
-  'Sole trader, partnership, company, or trust',
+  'Divisions, franchises, employees, and suppliers',
+  'Sole trader, business, partnership, company, or trust',
   'Export bills, payments, schedule, and BAS',
 ];
 
@@ -88,8 +89,8 @@ export function siteView() {
         <p style="color:#b7c4bc;max-width:46ch">Self-employed, businesses, and corporations.</p>
         <div class="packs">
           <article class="pack"><h3>Solo</h3><p>For self-employed people.</p><ul>${SOLO.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></article>
-          <article class="pack"><h3>House</h3><p>For businesses.</p><ul>${HOUSE.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></article>
-          <article class="pack"><h3>Hive</h3><p>For corporations.</p><ul>${HIVE.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></article>
+          <article class="pack"><h3>House</h3><p>For businesses. Divisions, franchises, employees, and suppliers.</p><ul>${HOUSE.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></article>
+          <article class="pack"><h3>Hive</h3><p>For corporations. Divisions, franchises, employees, and suppliers.</p><ul>${HIVE.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></article>
         </div>
       </section>
       <section id="features">

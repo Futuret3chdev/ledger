@@ -1,11 +1,11 @@
 import { bestMatch, draftsFromStatement } from '../lib/bank.js';
-import { CATEGORIES, GST_LABEL, METHOD_LABEL, METHODS, PROFILE_KIND_LABEL, PROFILE_KINDS, RECURRENCE_LABEL, RECURRENCES, STATES } from '../lib/catalog.js';
+import { CATEGORIES, GST_LABEL, METHOD_LABEL, METHODS, PROFILE_KIND_LABEL, PROFILE_KINDS, RECURRENCE_LABEL, RECURRENCES, STATES, usesOrg } from '../lib/catalog.js';
 import { CSV_TEMPLATE, billsToCsv, draftsFromCsv, toCsv } from '../lib/csv.js';
 import { addDays, longDate, mondayOnOrBefore, quarterRange, shortDate, todayMelbourne } from '../lib/dates.js';
 import { dollarsToCents, formatAud, splitGst } from '../lib/money.js';
 import { superPercent } from '../lib/rates.js';
 import { itemStatus, nextOpenPerBill, openItems, projectBook, seriesCards, sumRemaining } from '../lib/schedule.js';
-import { basWorksheet, yearTotals } from '../lib/tax.js';
+import { basWorksheet, spendBy, yearTotals } from '../lib/tax.js';
 import { emptyProfile, normalizeBook } from '../lib/validate.js';
 import './styles.css';
 import { bindSite, paintClock, siteView } from './site.js';
@@ -33,6 +33,7 @@ let horizon = 90;
 let flashMsg = '';
 let busy = false;
 let clock = null;
+let kindDraft = null;
 
 function onAppPath() {
   return location.pathname === '/app' || location.pathname.startsWith('/app');
@@ -523,6 +524,102 @@ function currentProfile() {
   return { ...emptyProfile(), ...(book.profile || {}) };
 }
 
+function effectiveKind() {
+  return kindDraft || currentProfile().kind;
+}
+
+function namedSelect(id, items, current, label) {
+  if (!items.length) return '';
+  return `<div class="field"><label for="${id}">${label}</label>
+    <select id="${id}"><option value="">—</option>${items
+      .map((item) => `<option value="${esc(item.id)}" ${current === item.id ? 'selected' : ''}>${esc(item.name)}</option>`)
+      .join('')}</select></div>`;
+}
+
+function orgSpendHtml() {
+  const items = knownItems(370);
+  const divNames = new Map((book.divisions || []).map((row) => [row.id, row.name]));
+  const franNames = new Map((book.franchises || []).map((row) => [row.id, row.name]));
+  const supNames = new Map((book.suppliers || []).map((row) => [row.id, row.name]));
+  const divs = spendBy(items, 'divisionId', divNames);
+  const frans = spendBy(items, 'franchiseId', franNames);
+  const sups = spendBy(items, 'supplierId', supNames);
+  if (!divs.length && !frans.length && !sups.length) return '';
+  const block = (title, rows) =>
+    rows.length
+      ? `<div class="group"><h3>${title}</h3>${rows
+          .map((row) => `<article class="pay"><b>${esc(row.name)}</b><div class="amt">${money(row.cents)}</div></article>`)
+          .join('')}</div>`
+      : '';
+  return block('Still open by division', divs) + block('Still open by franchise', frans) + block('Still open by supplier', sups);
+}
+
+function orgDesk() {
+  const divisions = book.divisions || [];
+  const franchises = book.franchises || [];
+  const suppliers = book.suppliers || [];
+  const employees = book.employees || [];
+  return `<div class="group">
+      <h3>Divisions</h3>
+      ${divisions.map((row) => `<article class="pay"><b>${esc(row.name)}</b><div class="actions"><button class="ghost danger" type="button" data-act="drop-division" data-id="${esc(row.id)}">Remove</button></div></article>`).join('')}
+      <div class="field"><label for="div-name">Division</label><input id="div-name" /></div>
+      <button class="ghost" type="button" data-act="add-division">Add division</button>
+    </div>
+    <div class="group">
+      <h3>Franchises</h3>
+      ${franchises
+        .map(
+          (row) =>
+            `<article class="pay"><b>${esc(row.name)}</b><div class="muted">${esc([row.suburb, row.state, row.franchisee].filter(Boolean).join(' · '))}</div><div class="actions"><button class="ghost danger" type="button" data-act="drop-franchise" data-id="${esc(row.id)}">Remove</button></div></article>`
+        )
+        .join('')}
+      <div class="field"><label for="fran-name">Location name</label><input id="fran-name" /></div>
+      <div class="pair">
+        <div class="field"><label for="fran-suburb">Suburb</label><input id="fran-suburb" /></div>
+        <div class="field"><label for="fran-state">State</label><select id="fran-state"><option value="">—</option>${STATES.map((st) => `<option>${st}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label for="fran-who">Franchisee</label><input id="fran-who" /></div>
+      <button class="ghost" type="button" data-act="add-franchise">Add franchise</button>
+    </div>
+    <div class="group">
+      <h3>Suppliers</h3>
+      ${suppliers
+        .map(
+          (row) =>
+            `<article class="pay"><b>${esc(row.name)}</b><div class="muted">${esc([row.abn && 'ABN ' + row.abn, row.email, row.phone].filter(Boolean).join(' · '))}</div><div class="actions"><button class="ghost danger" type="button" data-act="drop-supplier" data-id="${esc(row.id)}">Remove</button></div></article>`
+        )
+        .join('')}
+      <div class="field"><label for="sup-name">Supplier</label><input id="sup-name" /></div>
+      <div class="pair">
+        <div class="field"><label for="sup-abn">ABN</label><input id="sup-abn" /></div>
+        <div class="field"><label for="sup-email">Email</label><input id="sup-email" /></div>
+      </div>
+      <div class="field"><label for="sup-phone">Phone</label><input id="sup-phone" /></div>
+      <button class="ghost" type="button" data-act="add-supplier">Add supplier</button>
+    </div>
+    <div class="group">
+      <h3>Employees</h3>
+      <p class="note">People on this business. Super is a worksheet, not a payment to a fund.</p>
+      ${employees
+        .map((person) => {
+          const div = divisions.find((row) => row.id === person.divisionId);
+          const fran = franchises.find((row) => row.id === person.franchiseId);
+          return `<article class="pay"><b>${esc(person.name)}</b><div class="muted">${esc([person.role, div?.name, fran?.name].filter(Boolean).join(' · '))} · gross ${money(person.grossCents)}</div><div class="actions"><button class="ghost danger" type="button" data-act="drop-employee" data-id="${esc(person.id)}">Remove</button></div></article>`;
+        })
+        .join('')}
+      <div class="field"><label for="emp-name">Name</label><input id="emp-name" /></div>
+      <div class="field"><label for="emp-role">Role</label><input id="emp-role" /></div>
+      ${namedSelect('emp-div', divisions, '', 'Division')}
+      ${namedSelect('emp-fran', franchises, '', 'Franchise')}
+      <div class="pair">
+        <div class="field"><label for="emp-gross">Gross (AUD)</label><input id="emp-gross" inputmode="decimal" /></div>
+        <div class="field"><label for="emp-tax">Tax withheld (AUD)</label><input id="emp-tax" inputmode="decimal" /></div>
+      </div>
+      <div class="field"><label for="emp-super">Super %</label><input id="emp-super" inputmode="decimal" value="${superPercent(today())}" /></div>
+      <button class="ghost" type="button" data-act="add-employee">Add employee</button>
+    </div>`;
+}
+
 function taxView() {
   const profile = currentProfile();
   const bas = basWorksheet(book, today());
@@ -568,6 +665,7 @@ function taxView() {
         </div>
       </div>
     </div>
+    ${orgSpendHtml()}
     <div class="group">
       <h3>Kilometres (ATO cents per km)</h3>
       <p class="note">From 1 July 2026 the rate is 91c. The method caps at 5,000 km a year. A trip uses the rate on the day it happened.</p>
@@ -625,7 +723,7 @@ function deskView() {
     <form id="profile-form" class="group" style="margin-top:16px">
       <h3>Business</h3>
       <div class="field"><label for="kind">Structure</label>
-        <select id="kind">${PROFILE_KINDS.map((kind) => `<option value="${kind}" ${profile.kind === kind ? 'selected' : ''}>${esc(PROFILE_KIND_LABEL[kind])}</option>`).join('')}</select>
+        <select id="kind">${PROFILE_KINDS.map((kind) => `<option value="${kind}" ${effectiveKind() === kind ? 'selected' : ''}>${esc(PROFILE_KIND_LABEL[kind])}</option>`).join('')}</select>
       </div>
       <div class="field"><label for="legal">Legal name</label><input id="legal" value="${esc(profile.legalName)}" /></div>
       <div class="field"><label for="trading">Trading name</label><input id="trading" value="${esc(profile.tradingName)}" /></div>
@@ -655,7 +753,7 @@ function deskView() {
       <label class="check"><input id="jax-auto" type="checkbox" ${profile.jaxAuto ? 'checked' : ''}/> Apply JAX matches at 0.95 or above when a statement is imported</label>
       <p class="note">JAX here is a rule: same remaining amount, vendor name in the description, date within three days. It is not a trained model and it does not talk to a bank.</p>
       ${
-        profile.kind === 'partnership'
+        effectiveKind() === 'partnership'
           ? `<h3>Partners</h3>
             ${(profile.partners || [])
               .map((partner) => `<article class="pay"><b>${esc(partner.name)}</b><div class="muted">${partner.sharePercent}%</div><div class="actions"><button class="ghost danger" type="button" data-act="drop-partner" data-id="${esc(partner.id)}">Remove</button></div></article>`)
@@ -671,6 +769,11 @@ function deskView() {
         <button class="solid" type="submit">Save profile</button>
       </div>
     </form>
+    ${
+      usesOrg(effectiveKind())
+        ? orgDesk()
+        : ''
+    }
     <div class="group">
       <h3>Bank statements</h3>
       <p class="note">Import a CSV with date, description, and amount. Money out is negative. A live CDR feed is not plugged in. High-confidence matches can be applied by the rule above.</p>
@@ -739,11 +842,14 @@ function billSheet() {
       <div class="field"><label for="category">Category</label><select id="category">${CATEGORIES.map(
         (c) => `<option ${existing?.category === c || (!existing && c === 'Other') ? 'selected' : ''}>${esc(c)}</option>`
       ).join('')}</select></div>
-      <details ${existing?.reference || existing?.notes || existing?.endsOn ? 'open' : ''}>
+      <details ${existing?.reference || existing?.notes || existing?.endsOn || (book.divisions || []).length || (book.franchises || []).length || (book.suppliers || []).length ? 'open' : ''}>
         <summary>Reference, notes, end date</summary>
         <div class="field"><label for="reference">Invoice, BPAY, or account</label><input id="reference" value="${esc(existing?.reference || '')}" /></div>
         <div class="field"><label for="notes">Notes</label><textarea id="notes" rows="3">${esc(existing?.notes || '')}</textarea></div>
         <div class="field"><label for="ends">Last due date, if it stops</label><input id="ends" type="date" value="${esc(existing?.endsOn || '')}" /></div>
+        ${namedSelect('bill-div', book.divisions || [], existing?.divisionId || '', 'Division')}
+        ${namedSelect('bill-fran', book.franchises || [], existing?.franchiseId || '', 'Franchise')}
+        ${namedSelect('bill-sup', book.suppliers || [], existing?.supplierId || '', 'Supplier')}
       </details>
       ${existing ? `<label class="check"><input id="paused" type="checkbox" ${existing.paused ? 'checked' : ''}/> Pause future dates</label>` : ''}
       <div class="stack" style="margin-top:12px">
@@ -921,6 +1027,12 @@ function readBill() {
       reference: document.getElementById('reference').value,
       notes: document.getElementById('notes').value,
       paused: existing ? Boolean(document.getElementById('paused')?.checked) : false,
+      project: existing?.project || '',
+      divisionId: document.getElementById('bill-div')?.value || '',
+      franchiseId: document.getElementById('bill-fran')?.value || '',
+      supplierId: document.getElementById('bill-sup')?.value || '',
+      currency: existing?.currency || 'AUD',
+      fxMilli: existing?.fxMilli || 1000,
       createdAt: existing?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
@@ -1211,15 +1323,100 @@ root.addEventListener('click', (event) => {
     const person = {
       id: nid('empl'),
       name: document.getElementById('emp-name').value,
+      role: document.getElementById('emp-role')?.value || '',
       grossCents: gross,
       taxCents: tax,
       superPercent: superPct,
+      divisionId: document.getElementById('emp-div')?.value || '',
+      franchiseId: document.getElementById('emp-fran')?.value || '',
     };
     push({ ...book, employees: [...(book.employees || []), person] }, 'Added to the worksheet');
     return;
   }
   if (act === 'drop-employee') {
     push({ ...book, employees: (book.employees || []).filter((person) => person.id !== target.dataset.id) }, 'Removed from the worksheet');
+    return;
+  }
+  if (act === 'add-division') {
+    const name = document.getElementById('div-name').value;
+    push({ ...book, divisions: [...(book.divisions || []), { id: nid('divi'), name }] }, 'Division added');
+    return;
+  }
+  if (act === 'drop-division') {
+    const id = target.dataset.id;
+    push(
+      {
+        ...book,
+        divisions: (book.divisions || []).filter((row) => row.id !== id),
+        bills: book.bills.map((bill) => (bill.divisionId === id ? { ...bill, divisionId: '' } : bill)),
+        employees: (book.employees || []).map((person) => (person.divisionId === id ? { ...person, divisionId: '' } : person)),
+      },
+      'Division removed'
+    );
+    return;
+  }
+  if (act === 'add-franchise') {
+    push(
+      {
+        ...book,
+        franchises: [
+          ...(book.franchises || []),
+          {
+            id: nid('fran'),
+            name: document.getElementById('fran-name').value,
+            suburb: document.getElementById('fran-suburb').value,
+            state: document.getElementById('fran-state').value,
+            franchisee: document.getElementById('fran-who').value,
+          },
+        ],
+      },
+      'Franchise added'
+    );
+    return;
+  }
+  if (act === 'drop-franchise') {
+    const id = target.dataset.id;
+    push(
+      {
+        ...book,
+        franchises: (book.franchises || []).filter((row) => row.id !== id),
+        bills: book.bills.map((bill) => (bill.franchiseId === id ? { ...bill, franchiseId: '' } : bill)),
+        employees: (book.employees || []).map((person) => (person.franchiseId === id ? { ...person, franchiseId: '' } : person)),
+      },
+      'Franchise removed'
+    );
+    return;
+  }
+  if (act === 'add-supplier') {
+    push(
+      {
+        ...book,
+        suppliers: [
+          ...(book.suppliers || []),
+          {
+            id: nid('supp'),
+            name: document.getElementById('sup-name').value,
+            abn: document.getElementById('sup-abn').value,
+            email: document.getElementById('sup-email').value,
+            phone: document.getElementById('sup-phone').value,
+            gstMode: 'none',
+          },
+        ],
+      },
+      'Supplier added'
+    );
+    return;
+  }
+  if (act === 'drop-supplier') {
+    const id = target.dataset.id;
+    push(
+      {
+        ...book,
+        suppliers: (book.suppliers || []).filter((row) => row.id !== id),
+        bills: book.bills.map((bill) => (bill.supplierId === id ? { ...bill, supplierId: '' } : bill)),
+      },
+      'Supplier removed'
+    );
     return;
   }
   if (act === 'add-partner') {
@@ -1393,6 +1590,7 @@ function saveProfile(event) {
     email: document.getElementById('email').value,
     jaxAuto: Boolean(document.getElementById('jax-auto').checked),
   };
+  kindDraft = null;
   push({ ...book, deskName: profile.tradingName || profile.legalName || book.deskName, profile }, 'Profile saved');
 }
 
@@ -1420,6 +1618,10 @@ root.addEventListener('change', (event) => {
   }
   if (event.target.id === 'horizon') {
     horizon = Number(event.target.value);
+    render();
+  }
+  if (event.target.id === 'kind') {
+    kindDraft = event.target.value;
     render();
   }
 });
