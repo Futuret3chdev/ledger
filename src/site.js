@@ -97,6 +97,7 @@ export function siteView() {
         <h2 style="font-family:var(--serif);font-size:40px;letter-spacing:-.04em">Features</h2>
         <div class="feats">${FEATS.map(([t, d]) => `<div class="feat"><b>${esc(t)}</b><span>${esc(d)}</span></div>`).join('')}</div>
       </section>
+      <section id="find"></section>
       <section id="keepers">
         <div class="kicker site-eco">Keepers</div>
         <h2 style="font-family:var(--serif);font-size:40px;letter-spacing:-.04em">Accountants and bookkeepers.</h2>
@@ -107,7 +108,50 @@ export function siteView() {
           <article class="pack"><h3>Firms</h3><p>Set the profile to company, partnership, or trust. Keep projects on the bills. Export the year.</p></article>
         </div>
         <p style="color:#b7c4bc;max-width:52ch">A repeating bill stays on one card. Dates use Melbourne time. Kilometres use the ATO rate for the day of the trip.</p>
-        <p style="margin:18px 0 40px"><a class="go" href="/app" style="display:inline-flex;min-height:44px;border-radius:999px;padding:0 18px;align-items:center;background:#7dffb1;color:#06140e;text-decoration:none;font-weight:680">Open JAX</a></p>
+        <p style="margin:18px 0 28px"><a class="go" href="/app" style="display:inline-flex;min-height:44px;border-radius:999px;padding:0 18px;align-items:center;background:#7dffb1;color:#06140e;text-decoration:none;font-weight:680">Open JAX</a></p>
+        <div class="packs">
+          <article class="pack">
+            <h3>Sign up as a keeper</h3>
+            <p>Your name and firm go on the public list. Email stays off the list. Requests come to your inbox.</p>
+            <form id="keeper-form">
+              <div class="field"><label for="k-name">Name</label><input id="k-name" required /></div>
+              <div class="field"><label for="k-firm">Firm</label><input id="k-firm" /></div>
+              <div class="field"><label for="k-email">Email</label><input id="k-email" type="email" required /></div>
+              <div class="field"><label for="k-phone">Phone</label><input id="k-phone" /></div>
+              <div class="field"><label for="k-city">City</label><input id="k-city" /></div>
+              <div class="field"><label for="k-state">State</label><select id="k-state"><option value="">—</option><option>NSW</option><option>VIC</option><option>QLD</option><option>SA</option><option>WA</option><option>TAS</option><option>NT</option><option>ACT</option></select></div>
+              <div class="field"><label for="k-note">What you do</label><input id="k-note" /></div>
+              <div class="field"><label for="k-pass">Passphrase (8+ characters)</label><input id="k-pass" type="password" required minlength="8" /></div>
+              <button class="go" type="submit" style="margin-top:8px">Join the list</button>
+              <p id="k-out" class="note"></p>
+            </form>
+          </article>
+          <article class="pack">
+            <h3>Ask a keeper</h3>
+            <p>The message goes to that keeper’s inbox. If the list is empty, it still saves for JAX.</p>
+            <form id="ask-form">
+              <div class="field"><label for="a-keeper">Keeper</label><select id="a-keeper"><option value="">Anyone at JAX</option></select></div>
+              <div class="field"><label for="a-name">Your name</label><input id="a-name" required /></div>
+              <div class="field"><label for="a-email">Your email</label><input id="a-email" type="email" required /></div>
+              <div class="field"><label for="a-phone">Phone</label><input id="a-phone" /></div>
+              <div class="field"><label for="a-msg">Message</label><textarea id="a-msg" rows="4" required></textarea></div>
+              <button class="go" type="submit" style="margin-top:8px">Send</button>
+              <p id="a-out" class="note"></p>
+            </form>
+          </article>
+          <article class="pack">
+            <h3>Keeper inbox</h3>
+            <p>Open the requests sent to you.</p>
+            <form id="box-form">
+              <div class="field"><label for="b-email">Email</label><input id="b-email" type="email" required /></div>
+              <div class="field"><label for="b-pass">Passphrase</label><input id="b-pass" type="password" required /></div>
+              <button class="go" type="submit" style="margin-top:8px">Open inbox</button>
+            </form>
+            <div id="box-out"></div>
+          </article>
+        </div>
+        <h3 style="margin-top:8px">On the list</h3>
+        <div id="keeper-list" class="feats"><p class="note">No keepers have signed up yet.</p></div>
       </section>
       <section id="support">
         <div class="kicker site-eco">Support</div>
@@ -148,7 +192,30 @@ export function siteView() {
         </div>
       </section>
       <footer class="site-foot">
-        JAX by Futuret3ch and MemeTorrent for the MT ECO SYSTEM.
+        <div class="foot-grid">
+          <div>
+            <b>JAX</b>
+            <a href="#features">How JAX works</a>
+            <a href="#find">Find a keeper</a>
+            <a href="#plans">Plans</a>
+            <a href="/app">Open the desk</a>
+          </div>
+          <div>
+            <b>JAX for</b>
+            <a href="#keepers">Accountants and bookkeepers</a>
+            <a href="#plans">Self-employed</a>
+            <a href="#plans">Businesses</a>
+            <a href="#plans">Corporations</a>
+          </div>
+          <div>
+            <b>Resources</b>
+            <a href="#support">Support</a>
+            <a href="#support">GST</a>
+            <a href="#support">Kilometres</a>
+            <a href="https://memetorrent.futuret3ch.com.au/contact">Contact</a>
+          </div>
+        </div>
+        <p style="margin-top:22px">JAX by Futuret3ch and MemeTorrent for the MT ECO SYSTEM.</p>
       </footer>
     </div>
   </div>`;
@@ -190,6 +257,105 @@ export function bindSite() {
   kmDate?.addEventListener('change', paintKm);
 
   const basOut = document.getElementById('calc-bas-out');
+  const list = document.getElementById('keeper-list');
+  const askSelect = document.getElementById('a-keeper');
+  const paintKeepers = (keepers) => {
+    if (askSelect) {
+      askSelect.innerHTML =
+        '<option value="">Anyone at JAX</option>' +
+        keepers.map((k) => `<option value="${esc(k.id)}">${esc(k.name)}${k.firm ? ' · ' + esc(k.firm) : ''}</option>`).join('');
+    }
+    if (!list) return;
+    if (!keepers.length) {
+      list.innerHTML = '<p class="note">No keepers have signed up yet.</p>';
+      return;
+    }
+    list.innerHTML = keepers
+      .map(
+        (k) =>
+          `<div class="feat"><b>${esc(k.name)}${k.firm ? ' · ' + esc(k.firm) : ''}</b><span>${esc([k.city, k.state].filter(Boolean).join(', '))}${k.note ? ' · ' + esc(k.note) : ''}</span></div>`
+      )
+      .join('');
+  };
+  fetch('/api/keepers')
+    .then((res) => res.json())
+    .then((data) => paintKeepers(data.keepers || []))
+    .catch(() => {});
+
+  const postForm = (id, url, body, outId, ok) => {
+    const form = document.getElementById(id);
+    const out = document.getElementById(outId);
+    form?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (out) out.textContent = 'Sending…';
+      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body()) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (out) out.textContent = data.error || 'Not saved';
+        return;
+      }
+      if (out) out.textContent = ok;
+      form.reset();
+      const listRes = await fetch('/api/keepers');
+      const listData = await listRes.json().catch(() => ({ keepers: [] }));
+      paintKeepers(listData.keepers || []);
+    });
+  };
+  postForm(
+    'keeper-form',
+    '/api/keepers',
+    () => ({
+      name: document.getElementById('k-name').value,
+      firm: document.getElementById('k-firm').value,
+      email: document.getElementById('k-email').value,
+      phone: document.getElementById('k-phone').value,
+      city: document.getElementById('k-city').value,
+      state: document.getElementById('k-state').value,
+      note: document.getElementById('k-note').value,
+      passphrase: document.getElementById('k-pass').value,
+    }),
+    'k-out',
+    'You are on the list. Use the inbox with your email and passphrase.'
+  );
+  postForm(
+    'ask-form',
+    '/api/asks',
+    () => ({
+      keeperId: document.getElementById('a-keeper').value,
+      name: document.getElementById('a-name').value,
+      email: document.getElementById('a-email').value,
+      phone: document.getElementById('a-phone').value,
+      message: document.getElementById('a-msg').value,
+    }),
+    'a-out',
+    'Sent. It is in that keeper’s inbox.'
+  );
+  document.getElementById('box-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const box = document.getElementById('box-out');
+    box.textContent = 'Opening…';
+    const res = await fetch('/api/keeper-box', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: document.getElementById('b-email').value,
+        passphrase: document.getElementById('b-pass').value,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      box.textContent = data.error || 'Not opened';
+      return;
+    }
+    if (!data.asks.length) {
+      box.innerHTML = `<p class="note">No requests yet for ${esc(data.keeper.name)}.</p>`;
+      return;
+    }
+    box.innerHTML = data.asks
+      .map((ask) => `<article class="feat"><b>${esc(ask.name)}</b><span>${esc(ask.email)} ${esc(ask.phone)}<br>${esc(ask.message)}</span></article>`)
+      .join('');
+  });
+
   if (basOut) {
     const q = quarterRange(todayMelbourne());
     const fmt = (iso) =>

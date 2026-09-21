@@ -492,6 +492,33 @@ function paidView() {
       .join('')}`;
 }
 
+function fillPractice() {
+  const el = document.getElementById('practice-inbox');
+  if (!el) return;
+  request('/api/practice').then(({ res, data }) => {
+    if (!res.ok) {
+      el.textContent = data.error || 'Could not load the inbox.';
+      return;
+    }
+    const keepers = data.keepers || [];
+    const asks = data.asks || [];
+    if (!keepers.length && !asks.length) {
+      el.innerHTML = '<p class="note">No keepers and no requests yet.</p>';
+      return;
+    }
+    el.innerHTML =
+      keepers
+        .map((k) => `<article class="pay"><div class="when">${esc(k.createdAt?.slice(0, 10) || '')}</div><b>${esc(k.name)}${k.firm ? ' · ' + esc(k.firm) : ''}</b><div class="muted">${esc(k.email)} ${esc(k.phone)} · ${esc([k.city, k.state].filter(Boolean).join(', '))}</div></article>`)
+        .join('') +
+      asks
+        .map((ask) => {
+          const keeper = keepers.find((k) => k.id === ask.keeperId);
+          return `<article class="pay"><div class="when">${esc(ask.createdAt?.slice(0, 10) || '')} · to ${esc(keeper?.name || 'JAX')}</div><b>${esc(ask.name)}</b><div class="muted">${esc(ask.email)} ${esc(ask.phone)}</div><div class="muted">${esc(ask.message)}</div></article>`;
+        })
+        .join('');
+  });
+}
+
 function currentProfile() {
   return { ...emptyProfile(), ...(book.profile || {}) };
 }
@@ -667,6 +694,11 @@ function deskView() {
               .join('')
           : `<p class="note">${txns.length ? 'Every imported line is matched.' : 'No statement lines yet.'}</p>`
       }
+    </div>
+    <div class="group">
+      <h3>Keeper inbox</h3>
+      <p class="note">Signups and messages from the public site land here.</p>
+      <div id="practice-inbox">Loading…</div>
     </div>
     <div class="group">
       <h3>Install JAX</h3>
@@ -853,6 +885,7 @@ function render() {
   if (view === 'tax') body = taxView();
   if (view === 'desk') body = deskView();
   root.innerHTML = shell(body);
+  if (view === 'desk') fillPractice();
   if (focusId) {
     const el = document.getElementById(focusId);
     if (el) {
