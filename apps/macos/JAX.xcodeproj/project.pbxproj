@@ -1,0 +1,28 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+		B1001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		B1002 /* DeskViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeskViewController.swift; sourceTree = "<group>"; };
+		B1003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B1101 /* AppDelegate.swift */ = {isa = PBXBuildFile; fileRef = B1001 /* AppDelegate.swift */; };
+		B1102 /* DeskViewController.swift */ = {isa = PBXBuildFile; fileRef = B1002 /* DeskViewController.swift */; };
+		B1200 /* JAX */ = {isa = PBXGroup; children = (B1001 /* AppDelegate.swift */, B1002 /* DeskViewController.swift */, B1003 /* Info.plist */); path = JAX; sourceTree = "<group>"; };
+		B1201 /* root */ = {isa = PBXGroup; children = (B1200 /* JAX */, B1300 /* Products */); sourceTree = "<group>"; };
+		B1202 /* JAX.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JAX.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1300 /* Products */ = {isa = PBXGroup; children = (B1202 /* JAX.app */); name = Products; sourceTree = "<group>"; };
+		B1400 /* JAX */ = {isa = PBXNativeTarget; buildConfigurationList = B1600; buildPhases = (B1500 /* Sources */); buildRules = (); dependencies = (); name = JAX; productName = JAX; productReference = B1202 /* JAX.app */; productType = "com.apple.product-type.application"; };
+		B1500 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B1101 /* AppDelegate.swift */, B1102 /* DeskViewController.swift */); runOnlyForDeploymentPostprocessing = 0; };
+		B1600 = {isa = XCConfigurationList; buildConfigurations = (B1601 /* Debug */, B1602 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		B1601 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; COMBINE_HIDPI_IMAGES = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = JAX/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks"; MACOSX_DEPLOYMENT_TARGET = 13.0; PRODUCT_BUNDLE_IDENTIFIER = au.com.futuret3ch.jax.mac; PRODUCT_NAME = JAX; SDKROOT = macosx; SWIFT_VERSION = 5.0; }; name = Debug; };
+		B1602 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; COMBINE_HIDPI_IMAGES = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = JAX/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks"; MACOSX_DEPLOYMENT_TARGET = 13.0; PRODUCT_BUNDLE_IDENTIFIER = au.com.futuret3ch.jax.mac; PRODUCT_NAME = JAX; SDKROOT = macosx; SWIFT_VERSION = 5.0; }; name = Release; };
+		B1700 = {isa = XCConfigurationList; buildConfigurations = (B1701 /* Debug */, B1702 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		B1701 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {MACOSX_DEPLOYMENT_TARGET = 13.0; SDKROOT = macosx; SWIFT_VERSION = 5.0; }; name = Debug; };
+		B1702 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {MACOSX_DEPLOYMENT_TARGET = 13.0; SDKROOT = macosx; SWIFT_VERSION = 5.0; }; name = Release; };
+		B1800 /* Project object */ = {isa = PBXProject; buildConfigurationList = B1700; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = B1201 /* root */; productRefGroup = B1300 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (B1400 /* JAX */); };
+	};
+	rootObject = B1800 /* Project object */;
+}

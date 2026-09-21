@@ -1,0 +1,14 @@
+{
+  "name": "@futuret3ch/jax-feed",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Post bank statement lines into JAX.",
+  "main": "src/index.js",
+  "bin": {
+    "jax-feed": "./bin/jax-feed.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

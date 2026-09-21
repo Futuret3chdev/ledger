@@ -620,7 +620,7 @@ function deskView() {
   const unmatched = txns.filter((row) => !row.matchBillId);
   return `<div class="empty" style="border-style:solid">
       <h2>Desk</h2>
-      <p>Business profile, statement import, and how to put JAX on a phone or computer. Live Open Banking is not connected. A feed can post to <span class="muted">/api/feed</span> when a feed token is set.</p>
+      <p>Business profile, statement import, and native JAX on iPhone, Mac, and Windows. The feed SDK posts statement lines to this desk.</p>
     </div>
     <form id="profile-form" class="group" style="margin-top:16px">
       <h3>Business</h3>
@@ -702,9 +702,10 @@ function deskView() {
     </div>
     <div class="group">
       <h3>Install JAX</h3>
-      <p>This is a web app you can install. It is not listed on the Apple App Store or Google Play. Those stores need your developer accounts. On a phone or a computer it is the same desk.</p>
-      <p class="note">iPhone: Share, then Add to Home Screen.<br/>Android: browser menu, then Install app.<br/>Windows and Mac: Chrome or Edge, then Install JAX.</p>
-      <button class="ghost" type="button" data-act="install">Install on this device</button>
+      <p>The same desk in a native shell. iOS first in Xcode. Mac in Xcode. Windows with Electron, then pack an appx for the Microsoft Store.</p>
+      <p class="note">iPhone: on a Mac open <span class="muted">apps/ios/JAX.xcodeproj</span> and Run on a simulator.<br/>Mac: open <span class="muted">apps/macos/JAX.xcodeproj</span> and Run on My Mac.<br/>Windows: in <span class="muted">apps/windows</span> run npm install && npm start. npm run pack builds the Store appx.</p>
+      <p class="note">Feed SDK: <span class="muted">sdk/jax-feed</span>. Ping and post with LEDGER_FEED_TOKEN. Lines land on Desk for matching.</p>
+      <button class="ghost" type="button" data-act="install">Install this browser copy</button>
     </div>`;
 }
 

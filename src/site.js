@@ -48,7 +48,7 @@ const FEATS = [
   ['Bank statements', 'Drop in a statement and match the lines.'],
   ['Payroll', 'Gross, tax withheld, and super on a worksheet.'],
   ['Kilometres', 'ATO cents per kilometre, capped at 5,000 km.'],
-  ['On your phone and computer', 'Install JAX from the browser on iPhone, Android, Windows, or Mac.'],
+  ['On your phone and computer', 'JAX has an iOS Xcode project, a Mac app, and a Windows app you can run and pack for the Microsoft Store.'],
 ];
 
 export function siteView() {

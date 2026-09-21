@@ -1,0 +1,29 @@
+{
+  "name": "jax-windows",
+  "version": "1.0.0",
+  "private": true,
+  "description": "JAX for Windows. Sideload or submit the appx to Microsoft Store.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --win"
+  },
+  "author": "Futuret3ch",
+  "build": {
+    "appId": "au.com.futuret3ch.jax",
+    "productName": "JAX",
+    "win": {
+      "target": ["appx", "nsis"]
+    },
+    "appx": {
+      "identityName": "Futuret3ch.JAX",
+      "publisher": "CN=Futuret3ch",
+      "publisherDisplayName": "Futuret3ch",
+      "displayName": "JAX"
+    }
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.12"
+  }
+}
