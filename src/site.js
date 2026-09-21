@@ -12,34 +12,82 @@ function esc(s) {
     .replaceAll('"', '&quot;');
 }
 
-const SOLO = [
+const NIB = [
   'Invoices and quotes',
   'Bills and repeats on one card',
-  'Bank statement import and Quill matching',
-  'GST and BAS figures',
-  'Live reports',
+  'GST on a bill',
+  'Record payments when money moves',
+  'Melbourne dates',
+];
+const PAGE = [
+  'Everything in Nib',
+  'Bank statement import and matching',
+  'GST and BAS figures for the quarter',
+  'Kilometres at the ATO rate',
+];
+const BOOK = [
+  'Everything in Page',
   'Payroll worksheet and super',
   '90 day cash coming up',
-  'Kilometres at the ATO rate',
-  'Record payments when money moves',
+  'Export a CSV',
 ];
-
-const HOUSE = [
-  'Everything in Solo',
-  'Expenses and kilometres',
-  'More than one currency',
+const SHOP = [
+  'Everything in Book',
+  'Employees and subcontractors',
+  'Suppliers',
+  'Sole trader or partnership',
+];
+const FLOOR = [
+  'Everything in Shop',
+  'Divisions',
   'Income-year result',
   'Budget from the open schedule',
 ];
-
-const HIVE = [
-  'Everything in House',
+const YARD = [
+  'Everything in Floor',
+  'Franchises',
+  'More than one currency',
   '180 day cash coming up',
-  'Projects',
-  'Divisions, franchises, employees, and suppliers',
-  'Sole trader, business, partnership, company, or trust',
+];
+const HOUSE = [
+  'Everything in Yard',
+  'Company or trust',
+  'Projects on bills',
+  'A keeper can run this desk',
   'Export bills, payments, schedule, and BAS',
 ];
+const HIVE = [
+  'Everything in House',
+  'Full lists: employees, divisions, franchises, suppliers',
+  'Bank login when Basiq is on',
+  'iOS, Mac, and Windows shells',
+  'The Roll',
+];
+const BIGGER = [
+  'More than one desk',
+  'Staff seats',
+  'A firm running many clients',
+  'A price that fits the house',
+];
+
+function packCard({ name, who, intro, then, free, lines, action }) {
+  return `<article class="pack">
+    <h3>${esc(name)}</h3>
+    <p>${esc(who)}</p>
+    ${
+      intro
+        ? `<p class="price"><b>${esc(intro)}</b> <span>per month for the first 3 months</span></p>
+           <p class="then">Then ${esc(then)} a month.</p>
+           <p class="free">${esc(free)}</p>`
+        : ''
+    }
+    <ul>${lines.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>
+    ${action}
+  </article>`;
+}
+
+const BUY = `<p class="pack-act"><a class="go" href="/app">Buy now</a></p>`;
+const SALES = `<p class="pack-act"><a class="go" href="mailto:sales@futuret3ch.com.au">Talk to us</a></p>`;
 
 const FEATS = [
   ['Quill matching', 'Statement lines match bills when the amount, the name, and the date line up.'],
@@ -80,8 +128,6 @@ const MT_FOOT = [
 ];
 
 export function siteView() {
-  const offer = offerParts();
-  const unit = (n, label) => `<div><b>${esc(pad(n))}</b><span>${label}</span></div>`;
   const year = new Date().toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', year: 'numeric' });
   return `<div class="site">
     <header class="site-bar">
@@ -106,25 +152,37 @@ export function siteView() {
       <section class="hero">
         <p>For self-employed people, businesses, and corporations.</p>
         <div class="offer">
-          <div class="kicker">Limited time only</div>
-          ${
-            offer.ended
-              ? `<h2>90% off your plan for your first 3 months.</h2>`
-              : `<h2>90% off your plan for your first 3 months.</h2>
-                 <div class="clock" id="jax-clock">${unit(offer.days, 'Days')}${unit(offer.hours, 'Hours')}${unit(offer.mins, 'Mins')}${unit(offer.secs, 'Secs')}</div>`
-          }
+          <div class="kicker">On us</div>
+          <h2>Two months free if you are self-employed. One month free if you run a small or medium business.</h2>
+          <p class="offer-note">Then the first three months at the prices below.</p>
           <p style="margin:12px 0 0"><a class="go" href="/app" style="display:inline-flex;min-height:44px;border-radius:999px;padding:0 18px;align-items:center;background:#7dffb1;color:#06140e;text-decoration:none;font-weight:680">Buy now</a></p>
         </div>
       </section>
       <section id="plans">
         <div class="kicker site-eco">Plans</div>
-        <h2 style="font-family:var(--serif);font-size:40px;letter-spacing:-.04em">Solo, House, and Hive.</h2>
-        <p style="color:#b7c4bc;max-width:46ch">Self-employed, businesses, and corporations.</p>
+        <h2 style="font-family:var(--serif);font-size:40px;letter-spacing:-.04em">Pick the desk that fits the house.</h2>
+        <h3 class="band">Self-employed</h3>
+        <p class="band-note">Two months on us, free.</p>
         <div class="packs">
-          <article class="pack"><h3>Solo</h3><p>For self-employed people.</p><ul>${SOLO.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></article>
-          <article class="pack"><h3>House</h3><p>For businesses. Divisions, franchises, employees, and suppliers.</p><ul>${HOUSE.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></article>
-          <article class="pack"><h3>Hive</h3><p>For corporations. Divisions, franchises, employees, and suppliers.</p><ul>${HIVE.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></article>
+          ${packCard({ name: 'Nib', who: 'Start the books.', intro: '$3', then: '$30', free: 'Two months on us, free.', lines: NIB, action: BUY })}
+          ${packCard({ name: 'Page', who: 'Statements and BAS figures.', intro: '$6', then: '$60', free: 'Two months on us, free.', lines: PAGE, action: BUY })}
+          ${packCard({ name: 'Book', who: 'Payroll, cash coming up, and export.', intro: '$9', then: '$90', free: 'Two months on us, free.', lines: BOOK, action: BUY })}
         </div>
+        <h3 class="band">Small businesses</h3>
+        <p class="band-note">One month on us, free. Talk to us if you are a business.</p>
+        <div class="packs">
+          ${packCard({ name: 'Shop', who: 'People on the desk.', intro: '$7', then: '$70', free: 'One month on us, free.', lines: SHOP, action: BUY })}
+          ${packCard({ name: 'Floor', who: 'Divisions and the year.', intro: '$10', then: '$100', free: 'One month on us, free.', lines: FLOOR, action: BUY })}
+          ${packCard({ name: 'Yard', who: 'Franchises and more currency.', intro: '$13', then: '$130', free: 'One month on us, free.', lines: YARD, action: BUY })}
+        </div>
+        <h3 class="band">Medium business</h3>
+        <p class="band-note">One month on us, free.</p>
+        <div class="packs">
+          ${packCard({ name: 'House', who: 'Company or trust, keepers, full export.', intro: '$14.30', then: '$130', free: 'One month on us, free.', lines: HOUSE, action: BUY })}
+          ${packCard({ name: 'Hive', who: 'The full house and bank login.', intro: '$40', then: '$400', free: 'One month on us, free.', lines: HIVE, action: BUY })}
+          ${packCard({ name: 'Are you bigger?', who: 'Talk to us. We will set a desk that fits.', intro: '', then: '', free: '', lines: BIGGER, action: SALES })}
+        </div>
+        <p class="band-note" style="margin-top:8px">Sales: <a href="mailto:sales@futuret3ch.com.au">sales@futuret3ch.com.au</a></p>
       </section>
       <section id="features">
         <div class="kicker site-eco">Features</div>
@@ -287,6 +345,7 @@ export function siteView() {
             <a href="#support">Kilometres</a>
             <a href="mailto:Accounts@futuret3ch.com.au">Accounts</a>
             <a href="mailto:Support@futuret3ch.com.au">Support</a>
+            <a href="mailto:sales@futuret3ch.com.au">Sales</a>
           </div>
         </div>
         <p style="margin-top:22px">Quill by Futuret3ch and MemeTorrent for the MT ECO SYSTEM.</p>

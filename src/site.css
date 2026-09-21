@@ -46,6 +46,15 @@
 }
 .offer .kicker { color: #7dffb1; letter-spacing: 0.14em; text-transform: uppercase; font-size: 12px; font-weight: 680; }
 .offer h2 { font-family: var(--serif); font-size: 32px; margin: 8px 0; letter-spacing: -0.03em; }
+.offer-note { color: #b7c4bc; margin: 8px 0 0; }
+.band { font-family: var(--serif); font-size: 28px; margin: 36px 0 4px; letter-spacing: -0.03em; }
+.band-note { color: #b7c4bc; margin: 0 0 14px; }
+.pack .price { margin: 12px 0 0; }
+.pack .price b { font-family: var(--serif); font-size: 36px; letter-spacing: -0.04em; }
+.pack .price span { color: #8aa297; font-size: 14px; }
+.pack .then, .pack .free { color: #c5d2cb; margin: 4px 0 0; font-size: 14px; }
+.pack-act { margin-top: 16px; }
+.pack-act .go { display: inline-flex; min-height: 44px; align-items: center; }
 .clock { display: grid; grid-template-columns: repeat(4, minmax(64px, 1fr)); gap: 10px; margin: 18px 0; max-width: 420px; }
 .clock div {
   background: #050807;
