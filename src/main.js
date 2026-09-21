@@ -180,7 +180,7 @@ async function lock() {
   book = null;
   sheet = null;
   flash('');
-  render();
+  window.location.assign('/');
 }
 
 async function push(next, okMessage) {
@@ -833,7 +833,7 @@ function shell(body) {
     <div>
       <header class="top">
         <div class="brand"><div class="mark">Jx</div><div><h1>JAX</h1><p>${esc(book?.deskName || 'MT ECO SYSTEM')} · Melbourne dates</p></div></div>
-        <button class="ghost" type="button" data-act="lock">Lock</button>
+        <button class="ghost" type="button" data-act="lock">Log out</button>
       </header>
       <main class="main">${flashMsg ? `<p class="status" role="status">${esc(flashMsg)}</p>` : ''}${body}<p class="foot">JAX by Futuret3ch and MemeTorrent for the MT ECO SYSTEM. ${saved ? `Saved ${esc(saved)}.` : 'Nothing saved yet.'} Dates use Melbourne time.</p></main>
     </div>
