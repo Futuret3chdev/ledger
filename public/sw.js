@@ -1,7 +1,7 @@
-const CACHE = 'ledger-v2';
+const CACHE = 'ledger-v3';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(['/', '/manifest.json', '/favicon.svg'])));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(['/', '/manifest.json', '/favicon.svg', '/logo.png', '/icon-192.png'])));
   self.skipWaiting();
 });
 

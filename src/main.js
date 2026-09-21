@@ -1077,7 +1077,7 @@ function shell(body) {
     </nav>
     <div>
       <header class="top">
-        <div class="brand"><div class="mark">Jx</div><div><h1>JAX</h1><p>${esc(book?.deskName || 'MT ECO SYSTEM')} · Melbourne dates</p></div></div>
+        <div class="brand"><img class="mark" src="/logo.png" width="512" height="512" alt="JAX"/><div><h1>JAX</h1><p>${esc(book?.deskName || 'MT ECO SYSTEM')} · Melbourne dates</p></div></div>
         <button class="ghost" type="button" data-act="lock">Log out</button>
       </header>
       <main class="main">${flashMsg ? `<p class="status" role="status">${esc(flashMsg)}</p>` : ''}${body}<p class="foot">JAX by Futuret3ch and MemeTorrent for the MT ECO SYSTEM. ${saved ? `Saved ${esc(saved)}.` : 'Nothing saved yet.'} Dates use Melbourne time.</p></main>
@@ -1091,8 +1091,8 @@ function shell(body) {
 
 function lockView() {
   return `<div class="lock"><div class="card">
-    <div class="mark">Jx</div>
-    <p class="note" style="letter-spacing:.14em;text-transform:uppercase;font-weight:680">Futuret3ch · MemeTorrent</p>
+    <img class="mark" src="/logo.png" width="512" height="512" alt="JAX"/>
+    <p class="note" style="letter-spacing:.14em;text-transform:uppercase;font-weight:680">Futuret3ch · MemeTorrent $MT</p>
     <h1>JAX</h1>
     <p class="note">For self-employed people, businesses, and corporations. The desk is locked.</p>
     <p class="note"><a href="/" style="color:inherit">Back to the site</a></p>
@@ -1109,7 +1109,7 @@ function render() {
   const focusId = focus?.id || '';
   const caret = focus?.selectionStart;
   if (!ready) {
-    root.innerHTML = `<div class="lock"><div class="card"><div class="mark">Jx</div><h1>JAX</h1><p class="note">Opening…</p></div></div>`;
+    root.innerHTML = `<div class="lock"><div class="card"><img class="mark" src="/logo.png" width="512" height="512" alt="JAX"/><h1>JAX</h1><p class="note">Opening…</p></div></div>`;
     return;
   }
   if (!onAppPath()) {

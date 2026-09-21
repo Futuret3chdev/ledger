@@ -57,7 +57,7 @@ export function siteView() {
   const unit = (n, label) => `<div><b>${esc(pad(n))}</b><span>${label}</span></div>`;
   return `<div class="site">
     <header class="site-bar">
-      <a class="site-brand" href="/"><div class="mark">Jx</div><div><b>JAX</b><div class="site-eco">MT ECO SYSTEM</div></div></a>
+      <a class="site-brand" href="/"><img class="mark" src="/logo.png" width="512" height="512" alt="JAX"/><div><b>JAX</b><div class="site-eco">Futuret3ch · MemeTorrent $MT</div></div></a>
       <nav class="site-nav">
         <a href="#plans">Plans</a>
         <a href="#features">Features</a>

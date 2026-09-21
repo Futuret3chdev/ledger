@@ -39,13 +39,10 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  background: var(--green);
-  color: var(--paper);
-  display: grid;
-  place-items: center;
-  font-family: var(--serif);
-  font-weight: 650;
-  letter-spacing: -0.04em;
+  background: #050807;
+  object-fit: cover;
+  display: block;
+  flex: none;
 }
 .brand h1 { margin: 0; font-size: 22px; letter-spacing: -0.04em; font-family: var(--serif); font-weight: 560; }
 .brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
@@ -255,6 +252,7 @@ details summary { cursor: pointer; color: var(--green-2); font-weight: 680; min-
   box-shadow: var(--shadow);
 }
 .lock h1 { font-family: var(--serif); font-weight: 560; margin: 8px 0; font-size: 40px; letter-spacing: -0.04em; }
+.lock .mark { width: 96px; height: 96px; border-radius: 22px; margin: 0 auto 10px; }
 .toast {
   position: fixed;
   left: 50%;
