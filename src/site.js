@@ -52,12 +52,46 @@ const FEATS = [
   ['On your phone and computer', 'JAX has an iOS Xcode project, a Mac app, and a Windows app you can run and pack for the Microsoft Store.'],
 ];
 
+const MT_HOME = 'https://memetorrent.futuret3ch.com.au';
+const FT_HOME = 'https://www.futuret3ch.com.au';
+
+const MT_FOOT = [
+  ['Futuret3ch', FT_HOME],
+  ['Claim $MT', `${MT_HOME}/claims`],
+  ['Status', `${MT_HOME}/status`],
+  ['Portal', `${MT_HOME}/portal`],
+  ['Games', `${MT_HOME}/catalog`],
+  ['Shield', `${MT_HOME}/shield`],
+  ['Studio', `${MT_HOME}/studio`],
+  ['Chat', `${MT_HOME}/chat`],
+  ['IN-AI', `${MT_HOME}/AI`],
+  ['18+ games', `${MT_HOME}/casino`],
+  ['Software', `${MT_HOME}/software`],
+  ['Developers', `${MT_HOME}/developers`],
+  ['Business', `${MT_HOME}/business`],
+  ['Ads', `${MT_HOME}/ads`],
+  ['Media', `${MT_HOME}/media`],
+  ['Updates', `${MT_HOME}/updates`],
+  ['Terms', `${MT_HOME}/terms`],
+  ['Policies', `${MT_HOME}/policies`],
+  ['Safety', `${MT_HOME}/#safety`],
+  ['Privacy', `${MT_HOME}/privacy`],
+  ['Donations', `${MT_HOME}/donations`],
+];
+
 export function siteView() {
   const offer = offerParts();
   const unit = (n, label) => `<div><b>${esc(pad(n))}</b><span>${label}</span></div>`;
+  const year = new Date().toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', year: 'numeric' });
   return `<div class="site">
     <header class="site-bar">
-      <a class="site-brand" href="/"><img class="mark" src="/logo.png" width="512" height="512" alt="JAX"/><div><b>JAX</b><div class="site-eco">Futuret3ch · MemeTorrent $MT</div></div></a>
+      <div class="site-brand">
+        <a href="/"><img class="mark" src="/logo.png" width="512" height="512" alt="JAX"/></a>
+        <div>
+          <b>JAX by <a href="${FT_HOME}">Futuret3ch</a> and <a href="${MT_HOME}">MemeTorrent</a></b>
+          <div class="site-eco">for the <a href="${MT_HOME}">MT ECO SYSTEM</a></div>
+        </div>
+      </div>
       <nav class="site-nav">
         <a href="#plans">Plans</a>
         <a href="#features">Features</a>
@@ -70,8 +104,6 @@ export function siteView() {
     </header>
     <div class="site-wrap">
       <section class="hero">
-        <div class="site-eco">By Futuret3ch and MemeTorrent</div>
-        <h1>JAX</h1>
         <p>For self-employed people, businesses, and corporations.</p>
         <div class="offer">
           <div class="kicker">Limited time only</div>
@@ -202,7 +234,7 @@ export function siteView() {
           <div class="feat"><b>Statements</b><span>Desk, import a CSV with date, description, and amount. Money out is negative. Match a line to an open bill.</span></div>
           <div class="feat"><b>Tax</b><span>G1, 1A, 1B for this BAS quarter. Cash or accrual from the profile. Export the CSV.</span></div>
           <div class="feat"><b>Words</b><span>ABN is the 11-digit number. GST is 10%. BAS is the quarterly activity statement. Super on the worksheet is the guarantee rate from 1 July 2025: 12%.</span></div>
-          <div class="feat"><b>Talk to us</b><span><a href="https://memetorrent.futuret3ch.com.au/contact">Contact Futuret3ch and MemeTorrent</a></span></div>
+          <div class="feat"><b>Talk to us</b><span><a href="mailto:Accounts@futuret3ch.com.au">Accounts@futuret3ch.com.au</a> · <a href="mailto:Support@futuret3ch.com.au">Support@futuret3ch.com.au</a></span></div>
         </div>
         <div class="packs" style="margin-top:8px">
           <article class="pack">
@@ -253,10 +285,14 @@ export function siteView() {
             <a href="#support">Support</a>
             <a href="#support">GST</a>
             <a href="#support">Kilometres</a>
-            <a href="https://memetorrent.futuret3ch.com.au/contact">Contact</a>
+            <a href="mailto:Accounts@futuret3ch.com.au">Accounts</a>
+            <a href="mailto:Support@futuret3ch.com.au">Support</a>
           </div>
         </div>
         <p style="margin-top:22px">JAX by Futuret3ch and MemeTorrent for the MT ECO SYSTEM.</p>
+        <p>© ${esc(year)} MT-ECO SYSTEM — Developed by Futuret3ch and MemeTorrent. All core components self-hosted and self-built.</p>
+        <div class="foot-links">${MT_FOOT.map(([label, href]) => `<a href="${esc(href)}">${esc(label)}</a>`).join('')}</div>
+        <p class="foot-note">Built here. Hosted here. Keys stay with you.</p>
       </footer>
     </div>
   </div>`;

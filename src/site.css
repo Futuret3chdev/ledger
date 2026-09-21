@@ -16,8 +16,10 @@
 }
 .site-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
 .site-brand .mark { width: 48px; height: 48px; border-radius: 12px; }
-.site-brand b { font-family: var(--serif); font-size: 28px; letter-spacing: -0.04em; }
+.site-brand b { font-family: var(--serif); font-size: 18px; letter-spacing: -0.03em; line-height: 1.2; font-weight: 650; }
+.site-brand a { color: #7dffb1; text-decoration: none; }
 .site-eco { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: #7dffb1; }
+.site-eco a { color: inherit; text-decoration: none; }
 .site-nav { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .site-nav a, .site-nav button {
   min-height: 40px;
@@ -34,15 +36,7 @@
 .site-nav .go, .site .go { background: #7dffb1; color: #06140e; border-color: #7dffb1; }
 .site button.go { border: 0; cursor: pointer; }
 .hero { padding: 36px 0 20px; }
-.hero h1 {
-  font-family: var(--serif);
-  font-size: clamp(40px, 8vw, 72px);
-  letter-spacing: -0.05em;
-  line-height: 0.95;
-  margin: 8px 0 16px;
-  max-width: 14ch;
-}
-.hero p { max-width: 46ch; color: #b7c4bc; font-size: 18px; line-height: 1.45; }
+.hero p { max-width: 46ch; color: #eef3f0; font-size: clamp(28px, 5vw, 44px); line-height: 1.15; font-family: var(--serif); letter-spacing: -0.03em; margin: 8px 0 16px; }
 .offer {
   margin: 28px 0;
   padding: 22px;
@@ -81,6 +75,10 @@
 @media (min-width: 800px) { .site-foot .foot-grid { grid-template-columns: repeat(3, 1fr); } }
 .site-foot .foot-grid b { display: block; color: #eef3f0; margin-bottom: 8px; }
 .site-foot .foot-grid a { display: block; color: #8aa297; text-decoration: none; min-height: 28px; }
+.site-foot .foot-links { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 14px 0; }
+.site-foot .foot-links a { color: #8aa297; text-decoration: none; min-height: 28px; display: inline-flex; align-items: center; }
+.site-foot .foot-links a:hover, .site-foot .foot-grid a:hover { color: #eef3f0; }
+.site-foot .foot-note { font-size: 11px; color: #6d7c75; }
 .site .pack .field { margin: 10px 0; }
 .site .pack label { display: block; font-size: 12px; margin-bottom: 4px; color: #8aa297; }
 .site .pack input,
