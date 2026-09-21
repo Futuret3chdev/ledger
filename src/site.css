@@ -80,22 +80,27 @@
 @media (min-width: 800px) { .site-foot .foot-grid { grid-template-columns: repeat(3, 1fr); } }
 .site-foot .foot-grid b { display: block; color: #eef3f0; margin-bottom: 8px; }
 .site-foot .foot-grid a { display: block; color: #8aa297; text-decoration: none; min-height: 28px; }
-.pack textarea {
-  width: 100%;
-  border-radius: 12px;
-  border: 1px solid #2a3b34;
-  background: #050807;
-  color: #eef3f0;
-  padding: 10px 12px;
-}
-.pack .field { margin: 10px 0; }
-.pack label { display: block; font-size: 12px; margin-bottom: 4px; color: #8aa297; }
-.pack input, .pack select {
+.site .pack .field { margin: 10px 0; }
+.site .pack label { display: block; font-size: 12px; margin-bottom: 4px; color: #8aa297; }
+.site .pack input,
+.site .pack select,
+.site .pack textarea {
   width: 100%;
   min-height: 44px;
   border-radius: 12px;
-  border: 1px solid #2a3b34;
-  background: #050807;
-  color: #eef3f0;
+  border: 1px solid #3d5c4e;
+  background: #111a16;
+  color: #f4fff8;
+  -webkit-text-fill-color: #f4fff8;
+  caret-color: #7dffb1;
+  color-scheme: dark;
   padding: 0 12px;
+  font: inherit;
+}
+.site .pack textarea { padding: 10px 12px; min-height: 96px; }
+.site .pack input:focus,
+.site .pack select:focus,
+.site .pack textarea:focus {
+  outline: 2px solid #7dffb1;
+  outline-offset: 1px;
 }

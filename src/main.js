@@ -7,8 +7,8 @@ import { superPercent } from '../lib/rates.js';
 import { itemStatus, nextOpenPerBill, openItems, projectBook, seriesCards, sumRemaining } from '../lib/schedule.js';
 import { basWorksheet, yearTotals } from '../lib/tax.js';
 import { emptyProfile, normalizeBook } from '../lib/validate.js';
-import { bindSite, paintClock, siteView } from './site.js';
 import './styles.css';
+import { bindSite, paintClock, siteView } from './site.js';
 
 const root = document.getElementById('app');
 const VIEWS = [
