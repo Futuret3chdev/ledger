@@ -37,6 +37,7 @@ function fetchImpl(url, options = {}) {
   return handle(req, res).then(() => ({
     ok: res.statusCode >= 200 && res.statusCode < 300,
     status: res.statusCode,
+    headers: res.headers,
     json: async () => res.body,
   }));
 }
@@ -59,6 +60,39 @@ test('feed SDK pings and posts', async () => {
 test('feed SDK rejects a bad token', async () => {
   const feed = new JaxFeed({ baseUrl: 'http://localhost', token: 'wrong-token-xx', fetchImpl });
   await assert.rejects(() => feed.ping(), /not right|401/);
+});
+
+test('a logged-in desk can ping and post the feed without a bearer token', async () => {
+  const locked = await fetchImpl('http://localhost/api/feed', { method: 'GET' });
+  assert.equal(locked.status, 401);
+
+  const login = await fetchImpl('http://localhost/api/session', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ code: 'desk-test-code' }),
+  });
+  assert.equal(login.status, 200);
+  const cookie = login.headers['set-cookie'].split(';')[0];
+
+  const ping = await fetchImpl('http://localhost/api/feed', {
+    method: 'GET',
+    headers: { cookie },
+  });
+  assert.equal(ping.status, 200);
+  const pingBody = await ping.json();
+  assert.equal(pingBody.ok, true);
+  assert.equal(pingBody.feed, true);
+
+  const posted = await fetchImpl('http://localhost/api/feed', {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      transactions: [{ postedOn: '2026-09-22', description: 'NAB TEST LINE', amountCents: -1250 }],
+    }),
+  });
+  assert.equal(posted.status, 200);
+  const postedBody = await posted.json();
+  assert.equal(postedBody.added, 1);
 });
 
 test.after(async () => {

@@ -1,4 +1,4 @@
-import { bestMatch, draftsFromStatement } from '../lib/bank.js';
+import { bestMatch, draftsFromStatement, signedAmount } from '../lib/bank.js';
 import { CATEGORIES, GST_LABEL, METHOD_LABEL, METHODS, PROFILE_KIND_LABEL, PROFILE_KINDS, RECURRENCE_LABEL, RECURRENCES, STATES, usesOrg } from '../lib/catalog.js';
 import { CSV_TEMPLATE, billsToCsv, draftsFromCsv, toCsv } from '../lib/csv.js';
 import { addDays, longDate, mondayOnOrBefore, quarterRange, shortDate, todayMelbourne } from '../lib/dates.js';
@@ -493,6 +493,24 @@ function paidView() {
       .join('')}`;
 }
 
+function fillFeed() {
+  const el = document.getElementById('feed-status');
+  if (!el) return;
+  request('/api/feed')
+    .then(({ res, data }) => {
+      if (!res.ok) {
+        el.textContent = data.error || 'The feed is not available.';
+        return;
+      }
+      el.textContent = data.feed
+        ? 'Feed is live. A connector can post, and you can post a test line here.'
+        : 'No connector token on the server yet. You can still post a test line here.';
+    })
+    .catch(() => {
+      el.textContent = 'Could not reach the feed.';
+    });
+}
+
 function fillPractice() {
   const el = document.getElementById('practice-inbox');
   if (!el) return;
@@ -558,8 +576,10 @@ function orgDesk() {
   const divisions = book.divisions || [];
   const franchises = book.franchises || [];
   const suppliers = book.suppliers || [];
+  const subcontractors = book.subcontractors || [];
   const employees = book.employees || [];
-  return `<div class="group">
+  const sites = usesOrg(effectiveKind())
+    ? `<div class="group">
       <h3>Divisions</h3>
       ${divisions.map((row) => `<article class="pay"><b>${esc(row.name)}</b><div class="actions"><button class="ghost danger" type="button" data-act="drop-division" data-id="${esc(row.id)}">Remove</button></div></article>`).join('')}
       <div class="field"><label for="div-name">Division</label><input id="div-name" /></div>
@@ -580,7 +600,9 @@ function orgDesk() {
       </div>
       <div class="field"><label for="fran-who">Franchisee</label><input id="fran-who" /></div>
       <button class="ghost" type="button" data-act="add-franchise">Add franchise</button>
-    </div>
+    </div>`
+    : '';
+  return `${sites}
     <div class="group">
       <h3>Suppliers</h3>
       ${suppliers
@@ -599,7 +621,7 @@ function orgDesk() {
     </div>
     <div class="group">
       <h3>Employees</h3>
-      <p class="note">People on this business. Super is a worksheet, not a payment to a fund.</p>
+      <p class="note">People on the payroll. Super is a worksheet. Sole traders, partnerships, companies, and trusts use this list.</p>
       ${employees
         .map((person) => {
           const div = divisions.find((row) => row.id === person.divisionId);
@@ -617,6 +639,22 @@ function orgDesk() {
       </div>
       <div class="field"><label for="emp-super">Super %</label><input id="emp-super" inputmode="decimal" value="${superPercent(today())}" /></div>
       <button class="ghost" type="button" data-act="add-employee">Add employee</button>
+    </div>
+    <div class="group">
+      <h3>Subcontractors</h3>
+      <p class="note">Contractors you pay. Attach them on a bill. Sole traders, partnerships, companies, and trusts use this list.</p>
+      ${subcontractors
+        .map(
+          (row) =>
+            `<article class="pay"><b>${esc(row.name)}</b><div class="muted">${esc([row.work, row.abn && 'ABN ' + row.abn].filter(Boolean).join(' · '))}</div><div class="actions"><button class="ghost danger" type="button" data-act="drop-subcontractor" data-id="${esc(row.id)}">Remove</button></div></article>`
+        )
+        .join('')}
+      <div class="field"><label for="sub-name">Name</label><input id="sub-name" /></div>
+      <div class="pair">
+        <div class="field"><label for="sub-work">What they do</label><input id="sub-work" /></div>
+        <div class="field"><label for="sub-abn">ABN</label><input id="sub-abn" /></div>
+      </div>
+      <button class="ghost" type="button" data-act="add-subcontractor">Add subcontractor</button>
     </div>`;
 }
 
@@ -769,14 +807,22 @@ function deskView() {
         <button class="solid" type="submit">Save profile</button>
       </div>
     </form>
-    ${
-      usesOrg(effectiveKind())
-        ? orgDesk()
-        : ''
-    }
+    ${orgDesk()}
+    <div class="group">
+      <h3>Bank feed</h3>
+      <p id="feed-status">Checking the feed…</p>
+      <p class="note">A connector posts statement lines to this URL with header Authorization: Bearer and the feed token on the server. There is no bank login in this desk yet. Post a test line here to see it under Bank statements.</p>
+      <p class="muted" id="feed-url">https://ledger-futuret3ch.vercel.app/api/feed</p>
+      <div class="pair">
+        <div class="field"><label for="feed-on">Date</label><input id="feed-on" type="date" value="${today()}" /></div>
+        <div class="field"><label for="feed-amt">Amount (AUD, minus is money out)</label><input id="feed-amt" inputmode="decimal" /></div>
+      </div>
+      <div class="field"><label for="feed-desc">Description</label><input id="feed-desc" /></div>
+      <button class="solid" type="button" data-act="post-feed">Post a test line</button>
+    </div>
     <div class="group">
       <h3>Bank statements</h3>
-      <p class="note">Import a CSV with date, description, and amount. Money out is negative. A live CDR feed is not plugged in. High-confidence matches can be applied by the rule above.</p>
+      <p class="note">Import a CSV with date, description, and amount. Money out is negative. High-confidence matches can be applied by JAX.</p>
       <button class="solid" type="button" data-act="pick-statement">Import statement CSV</button>
       ${
         unmatched.length
@@ -842,7 +888,7 @@ function billSheet() {
       <div class="field"><label for="category">Category</label><select id="category">${CATEGORIES.map(
         (c) => `<option ${existing?.category === c || (!existing && c === 'Other') ? 'selected' : ''}>${esc(c)}</option>`
       ).join('')}</select></div>
-      <details ${existing?.reference || existing?.notes || existing?.endsOn || (book.divisions || []).length || (book.franchises || []).length || (book.suppliers || []).length ? 'open' : ''}>
+      <details ${existing?.reference || existing?.notes || existing?.endsOn || (book.divisions || []).length || (book.franchises || []).length || (book.suppliers || []).length || (book.subcontractors || []).length ? 'open' : ''}>
         <summary>Reference, notes, end date</summary>
         <div class="field"><label for="reference">Invoice, BPAY, or account</label><input id="reference" value="${esc(existing?.reference || '')}" /></div>
         <div class="field"><label for="notes">Notes</label><textarea id="notes" rows="3">${esc(existing?.notes || '')}</textarea></div>
@@ -850,6 +896,7 @@ function billSheet() {
         ${namedSelect('bill-div', book.divisions || [], existing?.divisionId || '', 'Division')}
         ${namedSelect('bill-fran', book.franchises || [], existing?.franchiseId || '', 'Franchise')}
         ${namedSelect('bill-sup', book.suppliers || [], existing?.supplierId || '', 'Supplier')}
+        ${namedSelect('bill-sub', book.subcontractors || [], existing?.subcontractorId || '', 'Subcontractor')}
       </details>
       ${existing ? `<label class="check"><input id="paused" type="checkbox" ${existing.paused ? 'checked' : ''}/> Pause future dates</label>` : ''}
       <div class="stack" style="margin-top:12px">
@@ -992,7 +1039,10 @@ function render() {
   if (view === 'tax') body = taxView();
   if (view === 'desk') body = deskView();
   root.innerHTML = shell(body);
-  if (view === 'desk') fillPractice();
+  if (view === 'desk') {
+    fillPractice();
+    fillFeed();
+  }
   if (focusId) {
     const el = document.getElementById(focusId);
     if (el) {
@@ -1031,6 +1081,7 @@ function readBill() {
       divisionId: document.getElementById('bill-div')?.value || '',
       franchiseId: document.getElementById('bill-fran')?.value || '',
       supplierId: document.getElementById('bill-sup')?.value || '',
+      subcontractorId: document.getElementById('bill-sub')?.value || '',
       currency: existing?.currency || 'AUD',
       fxMilli: existing?.fxMilli || 1000,
       createdAt: existing?.createdAt || new Date().toISOString(),
@@ -1417,6 +1468,72 @@ root.addEventListener('click', (event) => {
       },
       'Supplier removed'
     );
+    return;
+  }
+  if (act === 'add-subcontractor') {
+    push(
+      {
+        ...book,
+        subcontractors: [
+          ...(book.subcontractors || []),
+          {
+            id: nid('subc'),
+            name: document.getElementById('sub-name').value,
+            work: document.getElementById('sub-work').value,
+            abn: document.getElementById('sub-abn').value,
+          },
+        ],
+      },
+      'Subcontractor added'
+    );
+    return;
+  }
+  if (act === 'drop-subcontractor') {
+    const id = target.dataset.id;
+    push(
+      {
+        ...book,
+        subcontractors: (book.subcontractors || []).filter((row) => row.id !== id),
+        bills: book.bills.map((bill) => (bill.subcontractorId === id ? { ...bill, subcontractorId: '' } : bill)),
+      },
+      'Subcontractor removed'
+    );
+    return;
+  }
+  if (act === 'post-feed') {
+    const postedOn = document.getElementById('feed-on')?.value || '';
+    const description = document.getElementById('feed-desc')?.value || '';
+    const amountCents = signedAmount(document.getElementById('feed-amt')?.value || '');
+    if (!postedOn || !description.trim() || amountCents == null || amountCents === 0) {
+      flash('Date, description, and a non-zero amount. Minus is money out.');
+      render();
+      return;
+    }
+    busy = true;
+    flash('');
+    render();
+    request('/api/feed', {
+      method: 'POST',
+      body: { transactions: [{ postedOn, description: description.trim(), amountCents }] },
+    })
+      .then(async ({ res, data }) => {
+        if (!res.ok) {
+          busy = false;
+          flash(data.error || 'Feed did not accept that line');
+          render();
+          return;
+        }
+        const state = await request('/api/state');
+        busy = false;
+        if (state.res.ok) book = state.data;
+        flash(data.added ? 'Test line posted. Match it under Bank statements.' : 'That line was already on the desk.');
+        render();
+      })
+      .catch(() => {
+        busy = false;
+        flash('Feed did not accept that line');
+        render();
+      });
     return;
   }
   if (act === 'add-partner') {

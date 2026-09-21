@@ -44,15 +44,28 @@ if (cmd === 'ping') {
   console.log(JSON.stringify(data, null, 2));
 } else if (cmd === 'post') {
   const file = flag('--file');
-  if (!file) {
-    console.error('jax-feed post --file transactions.json');
-    process.exit(1);
+  let transactions;
+  if (file) {
+    const raw = JSON.parse(await readFile(file, 'utf8'));
+    transactions = Array.isArray(raw) ? raw : raw.transactions;
+  } else {
+    const postedOn = flag('--on');
+    const description = flag('--desc');
+    const cents = flag('--cents');
+    if (!postedOn || !description || !cents) {
+      console.error('jax-feed post --file transactions.json\njax-feed post --on YYYY-MM-DD --desc TEXT --cents -7500');
+      process.exit(1);
+    }
+    const amountCents = Number(cents);
+    if (!Number.isInteger(amountCents) || amountCents === 0) {
+      console.error('cents must be a non-zero integer. Minus is money out.');
+      process.exit(1);
+    }
+    transactions = [{ postedOn, description, amountCents, reference: flag('--ref') || '' }];
   }
-  const raw = JSON.parse(await readFile(file, 'utf8'));
-  const transactions = Array.isArray(raw) ? raw : raw.transactions;
   const data = await feed.post(transactions);
   console.log(JSON.stringify(data, null, 2));
 } else {
-  console.error('jax-feed ping\njax-feed post --file transactions.json [--url URL] [--token TOKEN]');
+  console.error('jax-feed ping\njax-feed post --file transactions.json\njax-feed post --on YYYY-MM-DD --desc TEXT --cents -7500 [--url URL] [--token TOKEN]');
   process.exit(1);
 }

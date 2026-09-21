@@ -1,17 +1,28 @@
 # JAX Feed SDK
 
-Post statement lines into JAX. Money out is negative cents. The feed does not pull from a bank. Your connector (Basiq, a CSV watcher, or your own code) calls this.
+Post statement lines into JAX. Money out is negative cents. The feed does not pull from a bank. A connector, a CSV watcher, or this CLI posts to `POST /api/feed`.
+
+There is no Open Banking login in the desk. To test from the live site, unlock JAX → Desk → Bank feed → Post a test line. Logged-in posts use the desk session. Connectors use the Bearer token.
 
 ## Test ping
+
+```bash
+./jax-feed ping
+```
+
+From this repo, `LEDGER_FEED_TOKEN` loads from `/root/ledger/.env.local` if unset. Expect `{ "ok": true, "name": "JAX", "feed": true }`.
 
 ```bash
 cd sdk/jax-feed
 LEDGER_FEED_TOKEN=your-token node bin/jax-feed.mjs ping --url https://ledger-futuret3ch.vercel.app
 ```
 
-Expect `{ "ok": true, "name": "JAX", "feed": true }`.
-
 ## Post lines
+
+```bash
+./jax-feed post --on 2026-09-22 --desc "HOSTGATOR HOSTING" --cents -7500
+./jax-feed post --file examples/transactions.json
+```
 
 ```bash
 LEDGER_FEED_TOKEN=your-token node bin/jax-feed.mjs post --url https://ledger-futuret3ch.vercel.app --file examples/transactions.json
