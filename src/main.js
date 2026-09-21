@@ -1,4 +1,5 @@
 import { bestMatch, draftsFromStatement, signedAmount } from '../lib/bank.js';
+import { BANK_TYPES, bankById, searchBanks } from '../lib/banks-au.js';
 import { CATEGORIES, GST_LABEL, METHOD_LABEL, METHODS, PROFILE_KIND_LABEL, PROFILE_KINDS, RECURRENCE_LABEL, RECURRENCES, STATES, usesOrg } from '../lib/catalog.js';
 import { CSV_TEMPLATE, billsToCsv, draftsFromCsv, toCsv } from '../lib/csv.js';
 import { addDays, longDate, mondayOnOrBefore, quarterRange, shortDate, todayMelbourne } from '../lib/dates.js';
@@ -34,6 +35,8 @@ let flashMsg = '';
 let busy = false;
 let clock = null;
 let kindDraft = null;
+let bankSearch = '';
+let bankPick = '';
 
 function onAppPath() {
   return location.pathname === '/app' || location.pathname.startsWith('/app');
@@ -658,6 +661,59 @@ function orgSpendHtml() {
   return block('Still open by division', divs) + block('Still open by franchise', frans) + block('Still open by supplier', sups);
 }
 
+function bankDesk() {
+  const accounts = book.bankAccounts || [];
+  const hits = searchBanks(bankSearch);
+  const picked = bankPick ? bankById(bankPick) : null;
+  const typeOpts = BANK_TYPES.map(([id, label]) => `<option value="${id}">${esc(label)}</option>`).join('');
+  const list = accounts.length
+    ? accounts
+        .map((acc) => {
+          const masked = [acc.bsb, acc.number ? acc.number.slice(-6) : ''].filter(Boolean).join('-');
+          return `<article class="pay">
+            <b>${esc(acc.name)}</b>
+            <div class="muted">${esc(acc.institution)}${masked ? ' · ' + esc(masked) : ''} · ${esc(acc.currency)}</div>
+            <div class="actions">
+              <button class="solid" type="button" data-act="get-bank-feed" data-id="${esc(acc.id)}">Get bank feeds</button>
+              <button class="ghost" type="button" data-act="pick-statement">Manually import a statement</button>
+              <button class="ghost danger" type="button" data-act="drop-bank-account" data-id="${esc(acc.id)}">Remove</button>
+            </div>
+          </article>`;
+        })
+        .join('')
+    : `<p class="note">No bank accounts on this desk yet.</p>`;
+  const search = picked
+    ? `<p class="note">Add accounts for ${esc(picked.name)}</p>
+      <div class="field"><label for="ba-name">Account name</label><input id="ba-name" placeholder="e.g. Business Account" /></div>
+      <div class="field"><label for="ba-type">Account type</label><select id="ba-type">${typeOpts}</select></div>
+      <div class="pair">
+        <div class="field"><label for="ba-bsb">BSB</label><input id="ba-bsb" inputmode="numeric" placeholder="013-711" /></div>
+        <div class="field"><label for="ba-number">Account number</label><input id="ba-number" inputmode="numeric" /></div>
+      </div>
+      <p class="muted">Currency AUD. You can add the account now and import a statement, or get a live feed after.</p>
+      <div class="stack" style="margin-top:12px">
+        <button class="solid" type="button" data-act="add-bank-account">Add account details</button>
+        <button class="ghost" type="button" data-act="clear-bank-pick">Back</button>
+      </div>`
+    : `<p class="note">Search for your bank to add it on this desk. Then import a statement, or get a live feed.</p>
+      <div class="field"><label for="bank-search">Search for banks, credit cards, and payment providers</label><input id="bank-search" value="${esc(bankSearch)}" placeholder="Search" /></div>
+      <p class="muted">Popular in Australia</p>
+      <div id="bank-hits">${hits
+        .map(
+          (row) =>
+            `<article class="pay"><b>${esc(row.name)}</b><div class="actions"><button class="solid" type="button" data-act="pick-bank" data-id="${esc(row.id)}">Add bank account</button></div></article>`
+        )
+        .join('')}</div>`;
+  return `<div class="group">
+    <h3>Bank accounts</h3>
+    ${list}
+    <h3 style="margin-top:18px">Add bank account</h3>
+    ${search}
+    <p id="bank-status">Checking bank login…</p>
+    <div id="bank-box"></div>
+  </div>`;
+}
+
 function orgDesk() {
   const divisions = book.divisions || [];
   const franchises = book.franchises || [];
@@ -894,11 +950,7 @@ function deskView() {
       </div>
     </form>
     ${orgDesk()}
-    <div class="group">
-      <h3>Bank</h3>
-      <p id="bank-status">Checking bank login…</p>
-      <div id="bank-box"></div>
-    </div>
+    ${bankDesk()}
     <div class="group">
       <h3>Bank feed</h3>
       <p id="feed-status">Checking the feed…</p>
@@ -1629,6 +1681,68 @@ root.addEventListener('click', (event) => {
       });
     return;
   }
+  if (act === 'pick-bank') {
+    bankPick = target.dataset.id || '';
+    render();
+    return;
+  }
+  if (act === 'clear-bank-pick') {
+    bankPick = '';
+    render();
+    return;
+  }
+  if (act === 'add-bank-account') {
+    const picked = bankById(bankPick);
+    if (!picked) {
+      flash('Pick a bank first.');
+      render();
+      return;
+    }
+    const name = document.getElementById('ba-name')?.value || '';
+    const accountType = document.getElementById('ba-type')?.value || 'everyday';
+    const bsb = document.getElementById('ba-bsb')?.value || '';
+    const number = document.getElementById('ba-number')?.value || '';
+    push(
+      {
+        ...book,
+        bankAccounts: [
+          ...(book.bankAccounts || []),
+          {
+            id: nid('bank'),
+            name: name.trim() || picked.name,
+            institution: picked.name,
+            institutionId: picked.id,
+            accountType,
+            currency: 'AUD',
+            bsb,
+            number,
+            feed: 'none',
+          },
+        ],
+      },
+      'Bank account added'
+    );
+    bankPick = '';
+    return;
+  }
+  if (act === 'drop-bank-account') {
+    const id = target.dataset.id;
+    push(
+      {
+        ...book,
+        bankAccounts: (book.bankAccounts || []).filter((row) => row.id !== id),
+      },
+      'Bank account removed'
+    );
+    return;
+  }
+  if (act === 'get-bank-feed') {
+    flash('A live feed uses Basiq. If Basiq says connections are not enabled, import a statement for this account.');
+    const connect = document.querySelector('[data-act="connect-bank"]');
+    if (connect) connect.click();
+    else render();
+    return;
+  }
   if (act === 'connect-bank') {
     const email = document.getElementById('bank-email')?.value || '';
     const mobile = document.getElementById('bank-mobile')?.value || '';
@@ -1919,6 +2033,18 @@ root.addEventListener('change', (event) => {
   if (event.target.id === 'kind') {
     kindDraft = event.target.value;
     render();
+  }
+  if (event.target.id === 'bank-search') {
+    bankSearch = event.target.value;
+    const box = document.getElementById('bank-hits');
+    if (box) {
+      box.innerHTML = searchBanks(bankSearch)
+        .map(
+          (row) =>
+            `<article class="pay"><b>${esc(row.name)}</b><div class="actions"><button class="solid" type="button" data-act="pick-bank" data-id="${esc(row.id)}">Add bank account</button></div></article>`
+        )
+        .join('');
+    }
   }
 });
 
