@@ -561,7 +561,7 @@ function fillBank() {
           return `<article class="pay"><b>${esc(conn.institution || 'Bank')}</b><div class="muted">${esc(conn.status || '')}${accounts ? ' · ' + esc(accounts) : ''}</div></article>`;
         })
         .join('');
-      box.innerHTML = `<p class="note">You log in at the bank on Basiq. When you come back, pull statements.</p>
+      box.innerHTML = `<p class="note">You log in at the bank on Basiq. When you come back, pull statements. If Basiq says Connections not enabled, open dashboard.basiq.io → your app → Customise UI → Institutions, tick the banks (Basiq sandbox is enough to test), set brand name and redirect to https://ledger-futuret3ch.vercel.app/app?bank=return, then Save.</p>
       <div class="pair">
         <div class="field"><label for="bank-email">Email</label><input id="bank-email" value="${esc(bank.email || profile.email)}" /></div>
         <div class="field"><label for="bank-mobile">Mobile</label><input id="bank-mobile" value="${esc(bank.mobile || profile.phone)}" /></div>

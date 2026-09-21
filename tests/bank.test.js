@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { auMobile, rowsFromTransactions } from '../lib/basiq.js';
+import { auMobile, consentUrl, rowsFromTransactions } from '../lib/basiq.js';
 
 const dir = await mkdtemp(path.join(tmpdir(), 'jax-bank-'));
 process.env.LEDGER_DATA_FILE = path.join(dir, 'ledger.json');
@@ -116,6 +116,14 @@ test('AU mobiles normalise and Basiq rows become signed cents', () => {
   assert.equal(rows[0].id, 'basiq_tx0001ab');
 });
 
+test('consent URL is Basiq home with connect action', () => {
+  const url = consentUrl('cli-token');
+  assert.match(url, /^https:\/\/consent\.basiq\.io\/home\?/);
+  assert.match(url, /token=cli-token/);
+  assert.match(url, /action=connect/);
+  assert.equal(url.includes('redirect='), false);
+});
+
 test('bank login is off until a Basiq key is set', async () => {
   const locked = await call('GET', '/api/bank');
   assert.equal(locked.statusCode, 401);
@@ -138,8 +146,9 @@ test('connect a bank, pull statements, then disconnect', async () => {
     body: { action: 'connect', email: 'desk@futuret3ch.com.au', mobile: '0412345678' },
   });
   assert.equal(started.statusCode, 200, started.body?.error);
-  assert.match(started.body.url, /consent\.basiq\.io/);
+  assert.match(started.body.url, /consent\.basiq\.io\/home/);
   assert.match(started.body.url, /cli-token/);
+  assert.match(started.body.url, /action=connect/);
   assert.equal(started.body.bank.connected, true);
 
   const pulled = await call('POST', '/api/bank', { cookie, body: { action: 'sync' } });
