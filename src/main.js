@@ -718,7 +718,7 @@ function deskView() {
   const unmatched = txns.filter((row) => !row.matchBillId);
   return `<div class="empty" style="border-style:solid">
       <h2>Desk</h2>
-      <p>Business profile, statement import, and native JAX on iPhone, Mac, and Windows. The feed SDK posts statement lines to this desk.</p>
+      <p>Your house. Who you are, the statements, and the people in it.</p>
     </div>
     <form id="profile-form" class="group" style="margin-top:16px">
       <h3>Business</h3>

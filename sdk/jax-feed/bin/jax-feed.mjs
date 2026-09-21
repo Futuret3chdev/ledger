@@ -1,6 +1,27 @@
 #!/usr/bin/env node
+import { existsSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { JaxFeed } from '../src/index.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const ledgerRoot = join(here, '../../..');
+const envFile = join(ledgerRoot, '.env.local');
+if (existsSync(envFile)) {
+  for (const line of readFileSync(envFile, 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq < 1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (process.env[key] == null) process.env[key] = value;
+  }
+}
 
 const args = process.argv.slice(2);
 function flag(name) {
