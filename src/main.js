@@ -7,7 +7,7 @@ import { superPercent } from '../lib/rates.js';
 import { itemStatus, nextOpenPerBill, openItems, projectBook, seriesCards, sumRemaining } from '../lib/schedule.js';
 import { basWorksheet, yearTotals } from '../lib/tax.js';
 import { emptyProfile, normalizeBook } from '../lib/validate.js';
-import { paintClock, siteView } from './site.js';
+import { bindSite, paintClock, siteView } from './site.js';
 import './styles.css';
 
 const root = document.getElementById('app');
@@ -837,6 +837,7 @@ function render() {
   }
   if (!onAppPath()) {
     root.innerHTML = siteView();
+    bindSite();
     startClock();
     return;
   }

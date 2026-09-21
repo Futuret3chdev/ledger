@@ -75,3 +75,14 @@
 .feat b { display: block; margin-bottom: 4px; }
 .feat span { color: #9aaba3; font-size: 14px; line-height: 1.45; }
 .site-foot { border-top: 1px solid #1b2621; padding: 28px 0 48px; color: #8aa297; font-size: 13px; line-height: 1.5; }
+.pack .field { margin: 10px 0; }
+.pack label { display: block; font-size: 12px; margin-bottom: 4px; color: #8aa297; }
+.pack input, .pack select {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid #2a3b34;
+  background: #050807;
+  color: #eef3f0;
+  padding: 0 12px;
+}

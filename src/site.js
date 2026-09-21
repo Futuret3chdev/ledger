@@ -1,4 +1,7 @@
+import { quarterRange, todayMelbourne } from '../lib/dates.js';
+import { dollarsToCents, formatAud, splitGst } from '../lib/money.js';
 import { offerParts, pad } from '../lib/offer.js';
+import { kmRateCents, KM_CAP } from '../lib/rates.js';
 import './site.css';
 
 function esc(s) {
@@ -57,6 +60,8 @@ export function siteView() {
       <nav class="site-nav">
         <a href="#plans">Plans</a>
         <a href="#features">Features</a>
+        <a href="#keepers">Keepers</a>
+        <a href="#support">Support</a>
         <a href="/app">Log in</a>
         <a class="go" href="/app">Buy now</a>
       </nav>
@@ -92,11 +97,107 @@ export function siteView() {
         <h2 style="font-family:var(--serif);font-size:40px;letter-spacing:-.04em">Features</h2>
         <div class="feats">${FEATS.map(([t, d]) => `<div class="feat"><b>${esc(t)}</b><span>${esc(d)}</span></div>`).join('')}</div>
       </section>
+      <section id="keepers">
+        <div class="kicker site-eco">Keepers</div>
+        <h2 style="font-family:var(--serif);font-size:40px;letter-spacing:-.04em">Accountants and bookkeepers.</h2>
+        <p style="color:#b7c4bc;max-width:52ch">Run a client on JAX. One desk. Their ABN on the print. Their BAS figures from the bills you entered. No partner portal, no extra product names.</p>
+        <div class="packs">
+          <article class="pack"><h3>Accountants</h3><p>Open Tax. G1, 1A, 1B for the quarter. Export the BAS CSV. Print invoices with the client ABN.</p></article>
+          <article class="pack"><h3>Bookkeepers</h3><p>Enter bills, import the statement, let JAX match the lines, mark paid when the money moved.</p></article>
+          <article class="pack"><h3>Firms</h3><p>Set the profile to company, partnership, or trust. Keep projects on the bills. Export the year.</p></article>
+        </div>
+        <p style="color:#b7c4bc;max-width:52ch">A repeating bill stays on one card. Dates use Melbourne time. Kilometres use the ATO rate for the day of the trip.</p>
+        <p style="margin:18px 0 40px"><a class="go" href="/app" style="display:inline-flex;min-height:44px;border-radius:999px;padding:0 18px;align-items:center;background:#7dffb1;color:#06140e;text-decoration:none;font-weight:680">Open JAX</a></p>
+      </section>
+      <section id="support">
+        <div class="kicker site-eco">Support</div>
+        <h2 style="font-family:var(--serif);font-size:40px;letter-spacing:-.04em">Support</h2>
+        <div class="feats">
+          <div class="feat"><b>Add a bill</b><span>Open the desk, Due, Add a bill. Who, what it is for, amount, GST, first due date, how it repeats.</span></div>
+          <div class="feat"><b>Plan</b><span>A monthly bill is one card. Show dates to pay or move a single day.</span></div>
+          <div class="feat"><b>Statements</b><span>Desk, import a CSV with date, description, and amount. Money out is negative. Match a line to an open bill.</span></div>
+          <div class="feat"><b>Tax</b><span>G1, 1A, 1B for this BAS quarter. Cash or accrual from the profile. Export the CSV.</span></div>
+          <div class="feat"><b>Words</b><span>ABN is the 11-digit number. GST is 10%. BAS is the quarterly activity statement. Super on the worksheet is the guarantee rate from 1 July 2025: 12%.</span></div>
+          <div class="feat"><b>Talk to us</b><span><a href="https://memetorrent.futuret3ch.com.au/contact">Contact Futuret3ch and MemeTorrent</a></span></div>
+        </div>
+        <div class="packs" style="margin-top:8px">
+          <article class="pack">
+            <h3>GST</h3>
+            <p>Type an amount. Inclusive, exclusive, or none.</p>
+            <div class="field"><label for="calc-gst">Amount (AUD)</label><input id="calc-gst" inputmode="decimal" /></div>
+            <div class="field"><label for="calc-gst-mode">GST</label>
+              <select id="calc-gst-mode">
+                <option value="inclusive">GST included</option>
+                <option value="exclusive">Add 10% GST</option>
+                <option value="none">No GST</option>
+              </select>
+            </div>
+            <p id="calc-gst-out" class="note">Enter an amount.</p>
+          </article>
+          <article class="pack">
+            <h3>Kilometres</h3>
+            <p>ATO cents per km for the date you drove. Cap 5,000 km.</p>
+            <div class="field"><label for="calc-km-date">Date</label><input id="calc-km-date" type="date" value="${esc(todayMelbourne())}" /></div>
+            <div class="field"><label for="calc-km">Kilometres</label><input id="calc-km" inputmode="numeric" /></div>
+            <p id="calc-km-out" class="note">Enter kilometres.</p>
+          </article>
+          <article class="pack">
+            <h3>This BAS quarter</h3>
+            <p id="calc-bas-out"></p>
+          </article>
+        </div>
+      </section>
       <footer class="site-foot">
         JAX by Futuret3ch and MemeTorrent for the MT ECO SYSTEM.
       </footer>
     </div>
   </div>`;
+}
+
+export function bindSite() {
+  const gstIn = document.getElementById('calc-gst');
+  const gstMode = document.getElementById('calc-gst-mode');
+  const gstOut = document.getElementById('calc-gst-out');
+  const paintGst = () => {
+    if (!gstOut) return;
+    const cents = dollarsToCents(gstIn?.value);
+    if (cents == null) {
+      gstOut.textContent = 'Enter an amount.';
+      return;
+    }
+    const split = splitGst(cents, gstMode?.value || 'inclusive');
+    gstOut.textContent = `GST ${formatAud(split.gst)} · total ${formatAud(split.total)} · ex GST ${formatAud(split.exGst)}`;
+  };
+  gstIn?.addEventListener('input', paintGst);
+  gstMode?.addEventListener('change', paintGst);
+
+  const kmIn = document.getElementById('calc-km');
+  const kmDate = document.getElementById('calc-km-date');
+  const kmOut = document.getElementById('calc-km-out');
+  const paintKm = () => {
+    if (!kmOut) return;
+    const km = Number(kmIn?.value);
+    const day = kmDate?.value || todayMelbourne();
+    if (!Number.isInteger(km) || km <= 0) {
+      kmOut.textContent = 'Enter kilometres.';
+      return;
+    }
+    const counted = Math.min(km, KM_CAP);
+    const rate = kmRateCents(day);
+    kmOut.textContent = `${counted} km × ${rate}c = ${formatAud(counted * rate)}${km > KM_CAP ? ` · ${km - KM_CAP} km over the cap` : ''}`;
+  };
+  kmIn?.addEventListener('input', paintKm);
+  kmDate?.addEventListener('change', paintKm);
+
+  const basOut = document.getElementById('calc-bas-out');
+  if (basOut) {
+    const q = quarterRange(todayMelbourne());
+    const fmt = (iso) =>
+      new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(
+        new Date(`${iso}T00:00:00Z`)
+      );
+    basOut.textContent = `${fmt(q.start)} – ${fmt(q.end)}.`;
+  }
 }
 
 export function paintClock() {
