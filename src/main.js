@@ -1,19 +1,30 @@
-import { CATEGORIES, GST_LABEL, METHOD_LABEL, METHODS, RECURRENCE_LABEL, RECURRENCES } from '../lib/catalog.js';
+import { bestMatch, draftsFromStatement } from '../lib/bank.js';
+import { CATEGORIES, GST_LABEL, METHOD_LABEL, METHODS, PROFILE_KIND_LABEL, PROFILE_KINDS, RECURRENCE_LABEL, RECURRENCES, STATES } from '../lib/catalog.js';
 import { CSV_TEMPLATE, billsToCsv, draftsFromCsv, toCsv } from '../lib/csv.js';
 import { addDays, longDate, mondayOnOrBefore, quarterRange, shortDate, todayMelbourne } from '../lib/dates.js';
 import { dollarsToCents, formatAud, splitGst } from '../lib/money.js';
-import { itemStatus, openItems, projectBook, sumRemaining } from '../lib/schedule.js';
-import { normalizeBook } from '../lib/validate.js';
+import { superPercent } from '../lib/rates.js';
+import { itemStatus, nextOpenPerBill, openItems, projectBook, seriesCards, sumRemaining } from '../lib/schedule.js';
+import { basWorksheet, yearTotals } from '../lib/tax.js';
+import { emptyProfile, normalizeBook } from '../lib/validate.js';
 import './styles.css';
 
 const root = document.getElementById('app');
-const VIEWS = ['due', 'schedule', 'bills', 'paid'];
+const VIEWS = [
+  ['due', 'Due'],
+  ['schedule', 'Plan'],
+  ['bills', 'Bills'],
+  ['paid', 'Paid'],
+  ['tax', 'Tax'],
+  ['desk', 'Desk'],
+];
 
 let book = null;
 let authed = false;
 let ready = false;
 let bootError = '';
-let view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'due';
+let view = VIEWS.some(([id]) => id === location.hash.slice(1)) ? location.hash.slice(1) : 'due';
+let openSeries = new Set();
 let sheet = null;
 let query = '';
 let category = 'all';
@@ -82,7 +93,15 @@ function download(name, text, type) {
   URL.revokeObjectURL(url);
 }
 
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  window.deferredInstall = event;
+});
+
 async function boot() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
   ready = false;
   bootError = '';
   render();
@@ -333,7 +352,7 @@ function dueView() {
       </div>
     </div>`;
   }
-  const open = openItems(items).filter(matches);
+  const open = nextOpenPerBill(openItems(items).filter(matches));
   const day = today();
   const groups = [
     ['Overdue', open.filter((item) => item.date < day)],
@@ -353,8 +372,33 @@ function dueView() {
     }`;
 }
 
+function seriesHtml(group) {
+  const next = group.next;
+  const status = itemStatus(next, today());
+  const expanded = openSeries.has(group.billId);
+  const gst = group.gstCents ? `GST ${formatAud(group.gstCents)}` : 'No GST';
+  return `<article class="series ${group.direction}">
+    <div class="series-top">
+      <div>
+        <div class="when"><span class="tag ${group.direction}">${group.direction === 'in' ? 'To receive' : 'To pay'}</span>${esc(RECURRENCE_LABEL[group.recurrence])} · ${esc(group.category)}</div>
+        <div class="who">${esc(group.vendor)}</div>
+        <div class="muted">${esc(group.title)}</div>
+        <div class="series-sum">${money(group.remainingCents)} still open · ${group.items.length} date${group.items.length === 1 ? '' : 's'}</div>
+        <div class="muted">${esc(gst)} in this window · next ${esc(longDate(next.date))} · ${esc(statusLabel(status))}</div>
+      </div>
+      <div class="amt">${money(next.remainingCents || next.total)}<small>next date</small></div>
+    </div>
+    <div class="actions">
+      ${next.remainingCents > 0 && !next.skipped ? `<button class="solid" type="button" data-act="pay" data-bill="${esc(group.billId)}" data-when="${esc(next.originalDate)}">${group.direction === 'in' ? 'Receive next' : 'Pay next'}</button>` : ''}
+      <button class="ghost" type="button" data-act="toggle-series" data-bill="${esc(group.billId)}">${expanded ? 'Hide dates' : 'Show dates'}</button>
+    </div>
+    ${expanded ? `<div class="series-dates">${group.items.map((item) => itemHtml(item)).join('')}</div>` : ''}
+  </article>`;
+}
+
 function scheduleView() {
   const items = knownItems(horizon).filter((item) => item.date >= today() && item.date <= addDays(today(), horizon)).filter(matches);
+  const cards = seriesCards(items);
   return `<div class="tools">
       <label class="muted" for="horizon">Show</label>
       <select id="horizon" aria-label="How far ahead">
@@ -363,9 +407,10 @@ function scheduleView() {
       <input id="q" type="search" placeholder="Search" value="${esc(query)}" />
       <button class="ghost" type="button" data-act="export-schedule">Export this schedule</button>
     </div>
+    <p class="note">A repeat stays on one card. Open it to pay or move a single date. A 90 day window of a monthly bill is three lines inside the card, not three cards.</p>
     ${
-      items.length
-        ? items.map((item) => itemHtml(item)).join('')
+      cards.length
+        ? cards.map((group) => seriesHtml(group)).join('')
         : `<div class="empty"><h2>No dates in this window.</h2><p>Add a bill, or look further ahead.</p></div>`
     }`;
 }
@@ -427,6 +472,190 @@ function paidView() {
         </article>`;
       })
       .join('')}`;
+}
+
+function currentProfile() {
+  return { ...emptyProfile(), ...(book.profile || {}) };
+}
+
+function taxView() {
+  const profile = currentProfile();
+  const bas = basWorksheet(book, today());
+  const year = yearTotals(book, today());
+  const day = today();
+  const items90 = knownItems(90);
+  const items180 = knownItems(180);
+  const open90 = openItems(items90).filter((item) => item.date >= day && item.date <= addDays(day, 89));
+  const open180 = openItems(items180).filter((item) => item.date >= day && item.date <= addDays(day, 179));
+  const employees = book.employees || [];
+  const trips = book.trips || [];
+  return `<div class="empty" style="border-style:solid">
+      <h2>Tax</h2>
+      <p>${esc(profile.legalName || book.deskName)} · ${esc(PROFILE_KIND_LABEL[profile.kind] || profile.kind)} · ${profile.gstRegistered ? 'GST registered' : 'Not GST registered'} · ${profile.gstBasis === 'accrual' ? 'Accrual' : 'Cash'} basis.</p>
+      <p class="note">These figures come from the bills and payments on this desk. They do not lodge a BAS or an income tax return with the ATO.</p>
+    </div>
+    <div class="figures" style="margin-top:14px">
+      <div class="figure out">
+        <h2>BAS ${esc(longDate(bas.quarter.start))} – ${esc(longDate(bas.quarter.end))}</h2>
+        <div class="nums">
+          <div><b>${money(bas.g1)}</b><span>G1 total sales</span></div>
+          <div><b>${money(bas.label1A)}</b><span>1A GST on sales</span></div>
+          <div><b>${money(bas.label1B)}</b><span>1B GST on purchases</span></div>
+        </div>
+        <p class="note">${bas.netGst >= 0 ? `Net GST to pay ${formatAud(bas.netGst)}` : `Net GST credit ${formatAud(-bas.netGst)}`}. ${bas.basis === 'cash' ? 'Cash basis uses the payment date.' : 'Accrual uses the due date.'}</p>
+      </div>
+      <div class="figure in">
+        <h2>Income year ${esc(year.year.label)}</h2>
+        <div class="nums">
+          <div><b>${money(year.income)}</b><span>Sales ex GST</span></div>
+          <div><b>${money(year.expenses)}</b><span>Costs ex GST</span></div>
+          <div><b>${money(year.profit)}</b><span>Result</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="figures">
+      <div class="figure out">
+        <h2>Cash still to move</h2>
+        <div class="nums">
+          <div><b>${money(sumRemaining(open90, 'out'))}</b><span>To pay, 90 days</span></div>
+          <div><b>${money(sumRemaining(open180, 'out'))}</b><span>To pay, 180 days</span></div>
+          <div><b>${money(sumRemaining(open90, 'in'))}</b><span>To receive, 90 days</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="group">
+      <h3>Kilometres (ATO cents per km)</h3>
+      <p class="note">From 1 July 2026 the rate is 91c. The method caps at 5,000 km a year. A trip uses the rate on the day it happened.</p>
+      <div class="pair">
+        <div class="field"><label for="trip-on">Date</label><input id="trip-on" type="date" value="${today()}" /></div>
+        <div class="field"><label for="trip-km">Kilometres</label><input id="trip-km" inputmode="numeric" /></div>
+      </div>
+      <div class="pair">
+        <div class="field"><label for="trip-purpose">What it was for</label><input id="trip-purpose" /></div>
+        <div class="field"><label for="trip-car">Vehicle</label><input id="trip-car" value="Car" /></div>
+      </div>
+      <button class="solid" type="button" data-act="add-trip">Add trip</button>
+      <p class="note" style="margin-top:10px">Claimed ${year.mileage.kilometres} km of ${year.mileage.cap} · ${money(year.mileage.cents)}</p>
+      ${trips
+        .slice()
+        .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn))
+        .map(
+          (trip) => `<article class="pay"><div class="when">${esc(longDate(trip.occurredOn))} · ${trip.kilometres} km · ${esc(trip.vehicle)}</div><b>${esc(trip.purpose)}</b><div class="actions"><button class="ghost danger" type="button" data-act="drop-trip" data-id="${esc(trip.id)}">Remove</button></div></article>`
+        )
+        .join('')}
+    </div>
+    <div class="group">
+      <h3>Payroll worksheet</h3>
+      <p class="note">Gross, tax withheld, and super at ${superPercent(today())}% unless you set another rate. This is a worksheet. It does not send STP or pay a fund.</p>
+      <div class="pair">
+        <div class="field"><label for="emp-name">Name</label><input id="emp-name" /></div>
+        <div class="field"><label for="emp-gross">Gross (AUD)</label><input id="emp-gross" inputmode="decimal" /></div>
+      </div>
+      <div class="pair">
+        <div class="field"><label for="emp-tax">Tax withheld (AUD)</label><input id="emp-tax" inputmode="decimal" /></div>
+        <div class="field"><label for="emp-super">Super %</label><input id="emp-super" inputmode="decimal" value="${superPercent(today())}" /></div>
+      </div>
+      <button class="solid" type="button" data-act="add-employee">Add to worksheet</button>
+      ${employees
+        .map((person) => {
+          const superCents = Math.round((person.grossCents * person.superPercent) / 100);
+          return `<article class="pay"><b>${esc(person.name)}</b><div class="muted">Gross ${money(person.grossCents)} · tax ${money(person.taxCents)} · super ${person.superPercent}% ${money(superCents)}</div><div class="actions"><button class="ghost danger" type="button" data-act="drop-employee" data-id="${esc(person.id)}">Remove</button></div></article>`;
+        })
+        .join('')}
+    </div>
+    <div class="stack">
+      <button class="ghost" type="button" data-act="export-bas">Export BAS CSV</button>
+    </div>`;
+}
+
+function deskView() {
+  const profile = currentProfile();
+  const txns = book.transactions || [];
+  const open = openItems(knownItems(400));
+  const unmatched = txns.filter((row) => !row.matchBillId);
+  return `<div class="empty" style="border-style:solid">
+      <h2>Desk</h2>
+      <p>Business profile, statement import, and how to put Ledger on a phone or computer. Live Open Banking is not connected. A feed can post to <span class="muted">/api/feed</span> when a feed token is set.</p>
+    </div>
+    <form id="profile-form" class="group" style="margin-top:16px">
+      <h3>Business</h3>
+      <div class="field"><label for="kind">Structure</label>
+        <select id="kind">${PROFILE_KINDS.map((kind) => `<option value="${kind}" ${profile.kind === kind ? 'selected' : ''}>${esc(PROFILE_KIND_LABEL[kind])}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label for="legal">Legal name</label><input id="legal" value="${esc(profile.legalName)}" /></div>
+      <div class="field"><label for="trading">Trading name</label><input id="trading" value="${esc(profile.tradingName)}" /></div>
+      <div class="pair">
+        <div class="field"><label for="abn">ABN (11 digits)</label><input id="abn" inputmode="numeric" value="${esc(profile.abn)}" /></div>
+        <div class="field"><label for="acn">ACN (9 digits)</label><input id="acn" inputmode="numeric" value="${esc(profile.acn)}" /></div>
+      </div>
+      <label class="check"><input id="gst-reg" type="checkbox" ${profile.gstRegistered ? 'checked' : ''}/> GST registered</label>
+      <div class="field"><label for="gst-basis">GST basis</label>
+        <select id="gst-basis">
+          <option value="cash" ${profile.gstBasis === 'cash' ? 'selected' : ''}>Cash</option>
+          <option value="accrual" ${profile.gstBasis === 'accrual' ? 'selected' : ''}>Accrual</option>
+        </select>
+      </div>
+      <div class="field"><label for="address">Street</label><input id="address" value="${esc(profile.address)}" /></div>
+      <div class="pair">
+        <div class="field"><label for="suburb">Suburb</label><input id="suburb" value="${esc(profile.suburb)}" /></div>
+        <div class="field"><label for="state">State</label>
+          <select id="state"><option value="">—</option>${STATES.map((st) => `<option ${profile.state === st ? 'selected' : ''}>${st}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="pair">
+        <div class="field"><label for="postcode">Postcode</label><input id="postcode" value="${esc(profile.postcode)}" /></div>
+        <div class="field"><label for="phone">Phone</label><input id="phone" value="${esc(profile.phone)}" /></div>
+      </div>
+      <div class="field"><label for="email">Email</label><input id="email" value="${esc(profile.email)}" /></div>
+      <label class="check"><input id="jax-auto" type="checkbox" ${profile.jaxAuto ? 'checked' : ''}/> Apply JAX matches at 0.95 or above when a statement is imported</label>
+      <p class="note">JAX here is a rule: same remaining amount, vendor name in the description, date within three days. It is not a trained model and it does not talk to a bank.</p>
+      ${
+        profile.kind === 'partnership'
+          ? `<h3>Partners</h3>
+            ${(profile.partners || [])
+              .map((partner) => `<article class="pay"><b>${esc(partner.name)}</b><div class="muted">${partner.sharePercent}%</div><div class="actions"><button class="ghost danger" type="button" data-act="drop-partner" data-id="${esc(partner.id)}">Remove</button></div></article>`)
+              .join('')}
+            <div class="pair">
+              <div class="field"><label for="partner-name">Partner name</label><input id="partner-name" /></div>
+              <div class="field"><label for="partner-share">Share %</label><input id="partner-share" inputmode="numeric" /></div>
+            </div>
+            <button class="ghost" type="button" data-act="add-partner">Add partner</button>`
+          : ''
+      }
+      <div class="stack" style="margin-top:12px">
+        <button class="solid" type="submit">Save profile</button>
+      </div>
+    </form>
+    <div class="group">
+      <h3>Bank statements</h3>
+      <p class="note">Import a CSV with date, description, and amount. Money out is negative. A live CDR feed is not plugged in. High-confidence matches can be applied by the rule above.</p>
+      <button class="solid" type="button" data-act="pick-statement">Import statement CSV</button>
+      ${
+        unmatched.length
+          ? unmatched
+              .map((txn) => {
+                const guess = bestMatch(txn, open);
+                return `<article class="pay">
+                  <div class="when">${esc(longDate(txn.postedOn))} · ${money(txn.amountCents)}</div>
+                  <b>${esc(txn.description)}</b>
+                  ${guess.item ? `<div class="muted">JAX ${guess.score.toFixed(2)} · ${esc(guess.item.vendor)} ${esc(longDate(guess.item.date))}</div>` : `<div class="muted">No open bill looks close.</div>`}
+                  ${
+                    guess.item
+                      ? `<div class="actions"><button class="solid" type="button" data-act="match-txn" data-txn="${esc(txn.id)}" data-bill="${esc(guess.item.billId)}" data-when="${esc(guess.item.originalDate)}">Match</button></div>`
+                      : ''
+                  }
+                </article>`;
+              })
+              .join('')
+          : `<p class="note">${txns.length ? 'Every imported line is matched.' : 'No statement lines yet.'}</p>`
+      }
+    </div>
+    <div class="group">
+      <h3>Install Ledger</h3>
+      <p>This is a web app you can install. It is not listed on the Apple App Store or Google Play. Those stores need your developer accounts. On a phone or a computer it is the same desk.</p>
+      <p class="note">iPhone: Share, then Add to Home Screen.<br/>Android: browser menu, then Install app.<br/>Windows and Mac: Chrome or Edge, then Install Ledger.</p>
+      <button class="ghost" type="button" data-act="install">Install on this device</button>
+    </div>`;
 }
 
 function billSheet() {
@@ -519,9 +748,10 @@ function moreSheet() {
 }
 
 function importSheet() {
+  const statement = sheet.type === 'statement';
   const rows = sheet.drafts.length
-    ? `<p>${sheet.drafts.length} bill${sheet.drafts.length === 1 ? '' : 's'} ready to add.</p>`
-    : `<p>No bills to add.</p>`;
+    ? `<p>${sheet.drafts.length} ${statement ? 'statement line' : 'bill'}${sheet.drafts.length === 1 ? '' : 's'} ready to add.</p>`
+    : `<p>Nothing to add.</p>`;
   const problems = sheet.errors.length
     ? `<div class="errors">${sheet.errors
         .slice(0, 8)
@@ -535,7 +765,7 @@ function importSheet() {
       ${rows}
       ${problems}
       <div class="stack">
-        <button class="solid" type="button" data-act="confirm-import" ${sheet.drafts.length ? '' : 'disabled'}>Add the valid rows</button>
+        <button class="solid" type="button" data-act="${statement ? 'confirm-statement' : 'confirm-import'}" ${sheet.drafts.length ? '' : 'disabled'}>Add the valid rows</button>
         <button class="ghost" type="button" data-act="close">Cancel</button>
       </div>
     </div>
@@ -548,7 +778,7 @@ function shell(body) {
     : null;
   return `<div class="app">
     <nav class="nav">
-      ${VIEWS.map((id) => `<button type="button" class="${view === id ? 'active' : ''}" data-view="${id}">${id[0].toUpperCase()}${id.slice(1)}</button>`).join('')}
+      ${VIEWS.map(([id, label]) => `<button type="button" class="${view === id ? 'active' : ''}" data-view="${id}">${label}</button>`).join('')}
     </nav>
     <div>
       <header class="top">
@@ -560,7 +790,7 @@ function shell(body) {
     ${sheet?.type === 'bill' ? billSheet() : ''}
     ${sheet?.type === 'pay' ? paySheet() : ''}
     ${sheet?.type === 'more' ? moreSheet() : ''}
-    ${sheet?.type === 'import' ? importSheet() : ''}
+    ${sheet?.type === 'import' || sheet?.type === 'statement' ? importSheet() : ''}
   </div>`;
 }
 
@@ -594,6 +824,8 @@ function render() {
   if (view === 'schedule') body = scheduleView();
   if (view === 'bills') body = billsView();
   if (view === 'paid') body = paidView();
+  if (view === 'tax') body = taxView();
+  if (view === 'desk') body = deskView();
   root.innerHTML = shell(body);
   if (focusId) {
     const el = document.getElementById(focusId);
@@ -783,6 +1015,12 @@ root.addEventListener('click', (event) => {
     push({ ...book, payments: book.payments.filter((item) => item.id !== payment.id) }, 'Payment removed');
     return;
   }
+  if (act === 'toggle-series') {
+    if (openSeries.has(target.dataset.bill)) openSeries.delete(target.dataset.bill);
+    else openSeries.add(target.dataset.bill);
+    render();
+    return;
+  }
   if (act === 'skip') {
     const item = findItem(target.dataset.bill, target.dataset.when);
     if (!item) return;
@@ -878,6 +1116,163 @@ root.addEventListener('click', (event) => {
     input.click();
     return;
   }
+  if (act === 'add-trip') {
+    const kilometres = Number(document.getElementById('trip-km').value);
+    const purpose = document.getElementById('trip-purpose').value;
+    const occurredOn = document.getElementById('trip-on').value;
+    if (!Number.isInteger(kilometres) || kilometres <= 0) {
+      flash('Enter whole kilometres.');
+      render();
+      return;
+    }
+    const trip = {
+      id: nid('trip'),
+      occurredOn,
+      kilometres,
+      purpose,
+      vehicle: document.getElementById('trip-car').value || 'Car',
+    };
+    push({ ...book, trips: [...(book.trips || []), trip] }, 'Trip added');
+    return;
+  }
+  if (act === 'drop-trip') {
+    push({ ...book, trips: (book.trips || []).filter((trip) => trip.id !== target.dataset.id) }, 'Trip removed');
+    return;
+  }
+  if (act === 'add-employee') {
+    const gross = dollarsToCents(document.getElementById('emp-gross').value);
+    const tax = dollarsToCents(document.getElementById('emp-tax').value);
+    const superPct = Number(document.getElementById('emp-super').value);
+    if (gross == null || tax == null) {
+      flash('Enter gross and tax in dollars.');
+      render();
+      return;
+    }
+    const person = {
+      id: nid('empl'),
+      name: document.getElementById('emp-name').value,
+      grossCents: gross,
+      taxCents: tax,
+      superPercent: superPct,
+    };
+    push({ ...book, employees: [...(book.employees || []), person] }, 'Added to the worksheet');
+    return;
+  }
+  if (act === 'drop-employee') {
+    push({ ...book, employees: (book.employees || []).filter((person) => person.id !== target.dataset.id) }, 'Removed from the worksheet');
+    return;
+  }
+  if (act === 'add-partner') {
+    const profile = currentProfile();
+    const share = Number(document.getElementById('partner-share').value);
+    const partner = {
+      id: nid('part'),
+      name: document.getElementById('partner-name').value,
+      sharePercent: share,
+    };
+    push({ ...book, profile: { ...profile, partners: [...(profile.partners || []), partner] } }, 'Partner added');
+    return;
+  }
+  if (act === 'drop-partner') {
+    const profile = currentProfile();
+    push({ ...book, profile: { ...profile, partners: (profile.partners || []).filter((partner) => partner.id !== target.dataset.id) } }, 'Partner removed');
+    return;
+  }
+  if (act === 'pick-statement') {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,text/csv';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      const { drafts, errors } = draftsFromStatement(text);
+      sheet = { type: 'statement', drafts, errors, name: file.name };
+      render();
+    };
+    input.click();
+    return;
+  }
+  if (act === 'confirm-statement') {
+    const now = new Date().toISOString();
+    let transactions = [
+      ...(book.transactions || []),
+      ...sheet.drafts.map((draft) => ({
+        ...draft,
+        id: nid('stmt'),
+        matchBillId: '',
+        matchOccurrence: '',
+        createdAt: now,
+      })),
+    ];
+    let payments = [...book.payments];
+    const profile = currentProfile();
+    if (profile.jaxAuto) {
+      const open = openItems(knownItems(400));
+      transactions = transactions.map((txn) => {
+        if (txn.matchBillId) return txn;
+        const guess = bestMatch(txn, open.filter((item) => !payments.some((payment) => payment.billId === item.billId && payment.occurrenceDate === item.originalDate && payment.amountCents === item.remainingCents)));
+        if (!guess.item || guess.score < 0.95) return txn;
+        payments.push({
+          id: nid('pay'),
+          billId: guess.item.billId,
+          occurrenceDate: guess.item.originalDate,
+          paidOn: txn.postedOn,
+          amountCents: Math.abs(txn.amountCents),
+          method: 'bank',
+          reference: txn.description.slice(0, 80),
+          createdAt: now,
+        });
+        return { ...txn, matchBillId: guess.item.billId, matchOccurrence: guess.item.originalDate };
+      });
+    }
+    push({ ...book, transactions, payments }, `Imported ${sheet.drafts.length} statement line${sheet.drafts.length === 1 ? '' : 's'}`);
+    return;
+  }
+  if (act === 'match-txn') {
+    const txn = (book.transactions || []).find((row) => row.id === target.dataset.txn);
+    const item = findItem(target.dataset.bill, target.dataset.when);
+    if (!txn || !item) return;
+    const payment = {
+      id: nid('pay'),
+      billId: item.billId,
+      occurrenceDate: item.originalDate,
+      paidOn: txn.postedOn,
+      amountCents: Math.abs(txn.amountCents),
+      method: 'bank',
+      reference: txn.description.slice(0, 80),
+      createdAt: new Date().toISOString(),
+    };
+    const transactions = (book.transactions || []).map((row) =>
+      row.id === txn.id ? { ...row, matchBillId: item.billId, matchOccurrence: item.originalDate } : row
+    );
+    push({ ...book, transactions, payments: [...book.payments, payment] }, 'Statement line matched');
+    return;
+  }
+  if (act === 'export-bas') {
+    const bas = basWorksheet(book, today());
+    const rows = [
+      ['field', 'amount'],
+      ['quarter_start', bas.quarter.start],
+      ['quarter_end', bas.quarter.end],
+      ['basis', bas.basis],
+      ['G1', (bas.g1 / 100).toFixed(2)],
+      ['1A', (bas.label1A / 100).toFixed(2)],
+      ['1B', (bas.label1B / 100).toFixed(2)],
+      ['net_gst', (bas.netGst / 100).toFixed(2)],
+    ];
+    download('ledger-bas.csv', toCsv(rows), 'text/csv');
+    return;
+  }
+  if (act === 'install') {
+    if (window.deferredInstall) {
+      window.deferredInstall.prompt();
+      return;
+    }
+    flash('Use the browser install menu, or on iPhone use Share then Add to Home Screen.');
+    render();
+    return;
+  }
   if (act === 'confirm-import') {
     const now = new Date().toISOString();
     const bills = [
@@ -893,11 +1288,34 @@ root.addEventListener('click', (event) => {
   }
 });
 
+function saveProfile(event) {
+  event.preventDefault();
+  const profile = {
+    ...currentProfile(),
+    kind: document.getElementById('kind').value,
+    legalName: document.getElementById('legal').value,
+    tradingName: document.getElementById('trading').value,
+    abn: document.getElementById('abn').value,
+    acn: document.getElementById('acn').value,
+    gstRegistered: Boolean(document.getElementById('gst-reg').checked),
+    gstBasis: document.getElementById('gst-basis').value,
+    address: document.getElementById('address').value,
+    suburb: document.getElementById('suburb').value,
+    state: document.getElementById('state').value,
+    postcode: document.getElementById('postcode').value,
+    phone: document.getElementById('phone').value,
+    email: document.getElementById('email').value,
+    jaxAuto: Boolean(document.getElementById('jax-auto').checked),
+  };
+  push({ ...book, deskName: profile.tradingName || profile.legalName || book.deskName, profile }, 'Profile saved');
+}
+
 root.addEventListener('submit', (event) => {
   if (event.target.id === 'lock-form') {
     event.preventDefault();
     unlock();
-  } else if (event.target.id === 'bill-form') saveBill(event);
+  } else if (event.target.id === 'profile-form') saveProfile(event);
+  else if (event.target.id === 'bill-form') saveBill(event);
   else if (event.target.id === 'pay-form') savePayment(event);
   else if (event.target.id === 'more-form') saveMore(event);
 });

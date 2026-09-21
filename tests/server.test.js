@@ -8,7 +8,7 @@ const dir = await mkdtemp(path.join(tmpdir(), 'ledger-'));
 process.env.LEDGER_DATA_FILE = path.join(dir, 'ledger.json');
 process.env.LEDGER_ACCESS_CODE = 'desk-test-code';
 process.env.LEDGER_SESSION_SECRET = 'desk-test-secret';
-delete process.env.BLOB_READ_WRITE_TOKEN;
+process.env.BLOB_READ_WRITE_TOKEN = '';
 delete process.env.VERCEL;
 
 const { handle } = await import('../lib/server.js');
