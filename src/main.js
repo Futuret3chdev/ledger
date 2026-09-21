@@ -1519,6 +1519,7 @@ root.addEventListener('click', (event) => {
       .then(async ({ res, data }) => {
         if (!res.ok) {
           busy = false;
+          if (data.book) book = data.book;
           flash(data.error || 'Feed did not accept that line');
           render();
           return;
