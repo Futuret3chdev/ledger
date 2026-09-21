@@ -2,7 +2,7 @@
   "name": "ledger",
   "version": "1.0.0",
   "private": true,
-  "description": "Futuret3ch Ledger — schedule bills and upcoming payments in AUD.",
+  "description": "JAX by Futuret3ch and MemeTorrent — books for the MT ECO SYSTEM.",
   "type": "module",
   "scripts": {
     "dev": "vite",

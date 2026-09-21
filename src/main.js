@@ -7,6 +7,7 @@ import { superPercent } from '../lib/rates.js';
 import { itemStatus, nextOpenPerBill, openItems, projectBook, seriesCards, sumRemaining } from '../lib/schedule.js';
 import { basWorksheet, yearTotals } from '../lib/tax.js';
 import { emptyProfile, normalizeBook } from '../lib/validate.js';
+import { paintClock, siteView } from './site.js';
 import './styles.css';
 
 const root = document.getElementById('app');
@@ -31,6 +32,22 @@ let category = 'all';
 let horizon = 90;
 let flashMsg = '';
 let busy = false;
+let clock = null;
+
+function onAppPath() {
+  return location.pathname === '/app' || location.pathname.startsWith('/app');
+}
+
+function startClock() {
+  if (clock) return;
+  clock = setInterval(paintClock, 1000);
+}
+
+function stopClock() {
+  if (!clock) return;
+  clearInterval(clock);
+  clock = null;
+}
 
 function esc(s) {
   return String(s ?? '')
@@ -108,7 +125,7 @@ async function boot() {
   try {
     const session = await request('/api/session');
     if (session.res.status === 503) {
-      bootError = session.data.error || 'Ledger access is not configured';
+      bootError = session.data.error || 'JAX access is not configured';
       ready = true;
       render();
       return;
@@ -428,6 +445,7 @@ function billsView() {
         <div class="muted">${esc(bill.title)} · ${esc(RECURRENCE_LABEL[bill.recurrence])} · ${money(splitGst(bill.amountCents, bill.gstMode).total)} payable · ${esc(GST_LABEL[bill.gstMode].toLowerCase())}</div>
         <div class="muted">${next ? `Next open ${esc(longDate(next.date))} · ${money(next.remainingCents)}` : 'Nothing open in the next year'}${bill.endsOn ? ` · ends ${esc(longDate(bill.endsOn))}` : ''}</div>
         <div class="actions">
+          ${bill.direction === 'in' ? `<button class="ghost" type="button" data-act="print-doc" data-bill="${esc(bill.id)}">Print</button>` : ''}
           <button class="ghost" type="button" data-act="edit" data-bill="${esc(bill.id)}">Edit</button>
           <button class="ghost" type="button" data-act="pause" data-bill="${esc(bill.id)}">${bill.paused ? 'Resume' : 'Pause'}</button>
           <button class="ghost danger" type="button" data-act="delete" data-bill="${esc(bill.id)}">Remove</button>
@@ -575,7 +593,7 @@ function deskView() {
   const unmatched = txns.filter((row) => !row.matchBillId);
   return `<div class="empty" style="border-style:solid">
       <h2>Desk</h2>
-      <p>Business profile, statement import, and how to put Ledger on a phone or computer. Live Open Banking is not connected. A feed can post to <span class="muted">/api/feed</span> when a feed token is set.</p>
+      <p>Business profile, statement import, and how to put JAX on a phone or computer. Live Open Banking is not connected. A feed can post to <span class="muted">/api/feed</span> when a feed token is set.</p>
     </div>
     <form id="profile-form" class="group" style="margin-top:16px">
       <h3>Business</h3>
@@ -651,9 +669,9 @@ function deskView() {
       }
     </div>
     <div class="group">
-      <h3>Install Ledger</h3>
+      <h3>Install JAX</h3>
       <p>This is a web app you can install. It is not listed on the Apple App Store or Google Play. Those stores need your developer accounts. On a phone or a computer it is the same desk.</p>
-      <p class="note">iPhone: Share, then Add to Home Screen.<br/>Android: browser menu, then Install app.<br/>Windows and Mac: Chrome or Edge, then Install Ledger.</p>
+      <p class="note">iPhone: Share, then Add to Home Screen.<br/>Android: browser menu, then Install app.<br/>Windows and Mac: Chrome or Edge, then Install JAX.</p>
       <button class="ghost" type="button" data-act="install">Install on this device</button>
     </div>`;
 }
@@ -782,10 +800,10 @@ function shell(body) {
     </nav>
     <div>
       <header class="top">
-        <div class="brand"><div class="mark">Ft</div><div><h1>Ledger</h1><p>${esc(book?.deskName || 'Futuret3ch')} · Melbourne dates</p></div></div>
+        <div class="brand"><div class="mark">Jx</div><div><h1>JAX</h1><p>${esc(book?.deskName || 'MT ECO SYSTEM')} · Melbourne dates</p></div></div>
         <button class="ghost" type="button" data-act="lock">Lock</button>
       </header>
-      <main class="main">${flashMsg ? `<p class="status" role="status">${esc(flashMsg)}</p>` : ''}${body}<p class="foot">Ledger by Futuret3ch. ${saved ? `Saved ${esc(saved)}.` : 'Nothing saved yet.'} Dates use Melbourne time.</p></main>
+      <main class="main">${flashMsg ? `<p class="status" role="status">${esc(flashMsg)}</p>` : ''}${body}<p class="foot">JAX by Futuret3ch and MemeTorrent for the MT ECO SYSTEM. ${saved ? `Saved ${esc(saved)}.` : 'Nothing saved yet.'} Dates use Melbourne time.</p></main>
     </div>
     ${sheet?.type === 'bill' ? billSheet() : ''}
     ${sheet?.type === 'pay' ? paySheet() : ''}
@@ -796,10 +814,11 @@ function shell(body) {
 
 function lockView() {
   return `<div class="lock"><div class="card">
-    <div class="mark">Ft</div>
-    <p class="note" style="letter-spacing:.14em;text-transform:uppercase;font-weight:680">Futuret3ch</p>
-    <h1>Ledger</h1>
-    <p class="note">Bills and the payments coming up. The desk is locked. Nothing on it is a sample.</p>
+    <div class="mark">Jx</div>
+    <p class="note" style="letter-spacing:.14em;text-transform:uppercase;font-weight:680">Futuret3ch · MemeTorrent</p>
+    <h1>JAX</h1>
+    <p class="note">The books for the MT ECO SYSTEM. The desk is locked. Nothing on it is a sample.</p>
+    <p class="note"><a href="/" style="color:inherit">Back to the site</a></p>
     ${bootError ? `<p class="errors">${esc(bootError)}</p>` : ''}
     <form id="lock-form">
       <div class="field"><label for="code">Access code</label><input id="code" type="password" autocomplete="current-password" required /></div>
@@ -813,9 +832,15 @@ function render() {
   const focusId = focus?.id || '';
   const caret = focus?.selectionStart;
   if (!ready) {
-    root.innerHTML = `<div class="lock"><div class="card"><div class="mark">Ft</div><h1>Ledger</h1><p class="note">Opening the desk…</p></div></div>`;
+    root.innerHTML = `<div class="lock"><div class="card"><div class="mark">Jx</div><h1>JAX</h1><p class="note">Opening…</p></div></div>`;
     return;
   }
+  if (!onAppPath()) {
+    root.innerHTML = siteView();
+    startClock();
+    return;
+  }
+  stopClock();
   if (!authed || !book) {
     root.innerHTML = lockView();
     return;
@@ -1262,6 +1287,32 @@ root.addEventListener('click', (event) => {
       ['net_gst', (bas.netGst / 100).toFixed(2)],
     ];
     download('ledger-bas.csv', toCsv(rows), 'text/csv');
+    return;
+  }
+  if (act === 'print-doc') {
+    const bill = book.bills.find((item) => item.id === target.dataset.bill);
+    if (!bill) return;
+    const profile = currentProfile();
+    const gst = splitGst(bill.amountCents, bill.gstMode);
+    const win = window.open('', '_blank');
+    if (!win) {
+      flash('Allow pop-ups to print.');
+      render();
+      return;
+    }
+    win.document.write(`<!DOCTYPE html><html lang="en-AU"><head><meta charset="utf-8"><title>JAX ${bill.direction === 'in' ? 'Invoice' : 'Bill'}</title>
+      <style>body{font-family:Georgia,serif;max-width:640px;margin:40px auto;color:#1b1914}h1{font-size:28px}table{width:100%;border-collapse:collapse}td{padding:8px 0;border-bottom:1px solid #ddd}</style></head><body>
+      <p>JAX · Futuret3ch and MemeTorrent · MT ECO SYSTEM</p>
+      <h1>${bill.direction === 'in' ? 'Invoice' : 'Bill'}</h1>
+      <p>${profile.legalName || book.deskName}<br>${profile.abn ? 'ABN ' + profile.abn : ''}<br>${profile.address} ${profile.suburb} ${profile.state} ${profile.postcode}</p>
+      <p>To ${bill.vendor}<br>${bill.title}<br>Due ${bill.startsOn}</p>
+      <table><tr><td>${bill.title}</td><td style="text-align:right">${formatAud(gst.total)}</td></tr>
+      <tr><td>GST</td><td style="text-align:right">${formatAud(gst.gst)}</td></tr></table>
+      <p>This is from the JAX desk. It is not a lodged BAS.</p>
+      </body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
     return;
   }
   if (act === 'install') {

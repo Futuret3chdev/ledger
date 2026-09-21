@@ -1,6 +1,6 @@
-# Ledger
+# JAX
 
-Bill and payment desk for Futuret3ch. Schedule money going out and money coming in, in Australian dollars, then record what was actually paid.
+Books for the MT ECO SYSTEM, by Futuret3ch and MemeTorrent. Schedule money going out and money coming in, in Australian dollars, then record what was actually paid.
 
 Dates use Melbourne time. Monthly and quarterly dates keep the same day of the month, or the last day when the month is shorter. A payment stays on the due date you record it against and does not pay the next one. GST uses the ATO one-eleventh rule for tax-inclusive amounts.
 
@@ -8,7 +8,11 @@ There is no sample data. The desk starts empty.
 
 ## Use
 
-Unlock with the access code, then add a bill. Choose **We pay** or **They pay us**, the amount, GST, the first due date, and how it repeats. Due shows what is still open. Schedule shows the window ahead, including dates already paid. Paid lists each recorded payment.
+Unlock with the access code, then add a bill. Choose **We pay** or **They pay us**, the amount, GST, the first due date, and how it repeats. Due shows the next open date of each bill. Plan groups a repeat onto one card. Tax builds a BAS worksheet from the desk. Desk holds the business profile and statement import.
+
+JAX matching is a rule: remaining amount, vendor name in the description, date within three days. It is not a trained model. A live bank feed is not connected. `POST /api/feed` accepts statement lines when `LEDGER_FEED_TOKEN` is set.
+
+This app can be installed from the browser on a phone or a computer. It is not listed on the Apple App Store or Google Play.
 
 Import a CSV with the columns in the blank template (`direction`, `vendor`, `title`, `amount`, `gst`, `first_due`, `repeats`, `category`, `reference`, `notes`, `ends_on`). Import adds those rows. A JSON backup can replace the desk.
 

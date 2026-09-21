@@ -1,7 +1,7 @@
 {
-  "name": "Ledger by Futuret3ch",
-  "short_name": "Ledger",
-  "description": "Schedule bills and the payments coming up, in AUD.",
+  "name": "JAX by Futuret3ch and MemeTorrent",
+  "short_name": "JAX",
+  "description": "The books for the MT ECO SYSTEM.",
   "start_url": "/",
   "display": "standalone",
   "id": "/",
