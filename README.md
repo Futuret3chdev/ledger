@@ -10,7 +10,11 @@ There is no sample data. The desk starts empty.
 
 Unlock with the access code, then add a bill. Choose **We pay** or **They pay us**, the amount, GST, the first due date, and how it repeats. Due shows the next open date of each bill. Plan groups a repeat onto one card. Tax builds a BAS worksheet from the desk. Desk holds the business profile and statement import.
 
-JAX matching is a rule: remaining amount, vendor name in the description, date within three days. It is not a trained model. There is no bank login in the desk. `POST /api/feed` accepts statement lines from a logged-in desk session, or with `Authorization: Bearer` when `LEDGER_FEED_TOKEN` is set. Test from Desk → Bank feed, or `./jax-feed ping` then `./jax-feed post --on YYYY-MM-DD --desc TEXT --cents -7500`.
+JAX matching is a rule: remaining amount, vendor name in the description, date within three days. It is not a trained model.
+
+Bank login uses Basiq Open Banking. Connect a bank is shown only when `BASIQ_API_KEY` is set (the key from dashboard.basiq.io, used as Basic auth, not re-encoded). That button opens Basiq’s consent page. JAX does not keep bank passwords. After consent, Pull statements copies posted lines onto the desk (last 90 days). Without the key, the desk says bank login is off.
+
+`POST /api/feed` still accepts statement lines from a logged-in desk session, or with `Authorization: Bearer` when `LEDGER_FEED_TOKEN` is set. Test from Desk → Bank feed, or `./jax-feed ping` then `./jax-feed post --on YYYY-MM-DD --desc TEXT --cents -7500`.
 
 Sole traders, partnerships, companies, and trusts can hold employees and subcontractors. Businesses, companies, and partnerships can also hold divisions and franchises.
 

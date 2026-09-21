@@ -2,7 +2,7 @@
 
 Post statement lines into JAX. Money out is negative cents. The feed does not pull from a bank. A connector, a CSV watcher, or this CLI posts to `POST /api/feed`.
 
-There is no Open Banking login in the desk. To test from the live site, unlock JAX → Desk → Bank feed → Post a test line. Logged-in posts use the desk session. Connectors use the Bearer token.
+The desk also has Bank login through Basiq. This SDK is the machine feed: logged-in posts use the desk session; connectors use the Bearer token. To post a test line without a bank, unlock JAX → Desk → Bank feed → Post a test line.
 
 ## Test ping
 

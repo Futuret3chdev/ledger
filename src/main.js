@@ -142,6 +142,7 @@ async function boot() {
   }
   ready = true;
   render();
+  await finishBankReturn();
 }
 
 async function unlock() {
@@ -168,6 +169,7 @@ async function unlock() {
     book = state.data;
     bootError = '';
     render();
+    await finishBankReturn();
   } catch {
     busy = false;
     flash('The desk did not open. Check the connection and try again.');
@@ -231,6 +233,42 @@ async function push(next, okMessage) {
     flash('Not saved. The connection failed, so nothing was changed.');
     render();
   }
+}
+
+function returningFromBank() {
+  try {
+    return new URLSearchParams(location.search).get('bank') === 'return';
+  } catch {
+    return false;
+  }
+}
+
+async function finishBankReturn() {
+  if (!returningFromBank() || !authed || !book) return;
+  view = 'desk';
+  history.replaceState(null, '', '/app#desk');
+  busy = true;
+  render();
+  try {
+    const { res, data } = await request('/api/bank', { method: 'POST', body: { action: 'sync' } });
+    if (res.ok) {
+      const state = await request('/api/state');
+      if (state.res.ok) book = state.data;
+      flash(
+        data.pending
+          ? 'The bank is still fetching. Pull statements in a minute.'
+          : data.added
+            ? `Pulled ${data.added} statement line${data.added === 1 ? '' : 's'}.`
+            : 'Bank connected. No new lines yet.'
+      );
+    } else {
+      flash(data.error || 'Could not pull statements');
+    }
+  } catch {
+    flash('Could not pull statements');
+  }
+  busy = false;
+  render();
 }
 
 function withAdjustment(billId, occurrenceDate, patch) {
@@ -491,6 +529,54 @@ function paidView() {
         </article>`;
       })
       .join('')}`;
+}
+
+function fillBank() {
+  const el = document.getElementById('bank-status');
+  const box = document.getElementById('bank-box');
+  if (!el || !box) return;
+  request('/api/bank')
+    .then(({ res, data }) => {
+      if (!res.ok) {
+        el.textContent = data.error || 'Bank login is not available.';
+        box.innerHTML = '';
+        return;
+      }
+      if (!data.configured) {
+        el.textContent = 'Bank login is off. It uses Basiq Open Banking and needs a Basiq API key on this server.';
+        box.innerHTML = '';
+        return;
+      }
+      const bank = data.bank || {};
+      const profile = currentProfile();
+      const names = (bank.connections || []).map((row) => row.institution).filter(Boolean).join(', ');
+      if (names) el.textContent = `Connected: ${names}.`;
+      else if (bank.connected) el.textContent = 'A Basiq user sits on this desk. Connect a bank to pick the institution.';
+      else el.textContent = 'Basiq is on. Connect a bank opens their consent page. JAX does not keep the bank password.';
+      const connections = (bank.connections || [])
+        .map((conn) => {
+          const accounts = (conn.accounts || [])
+            .map((acc) => `${acc.name}${acc.masked ? ' ' + acc.masked : ''} ${formatAud(acc.balanceCents)}`)
+            .join(' · ');
+          return `<article class="pay"><b>${esc(conn.institution || 'Bank')}</b><div class="muted">${esc(conn.status || '')}${accounts ? ' · ' + esc(accounts) : ''}</div></article>`;
+        })
+        .join('');
+      box.innerHTML = `<p class="note">You log in at the bank on Basiq. When you come back, pull statements.</p>
+      <div class="pair">
+        <div class="field"><label for="bank-email">Email</label><input id="bank-email" value="${esc(bank.email || profile.email)}" /></div>
+        <div class="field"><label for="bank-mobile">Mobile</label><input id="bank-mobile" value="${esc(bank.mobile || profile.phone)}" /></div>
+      </div>
+      ${connections}
+      <div class="stack" style="margin-top:12px">
+        <button class="solid" type="button" data-act="connect-bank">Connect a bank</button>
+        ${bank.connected ? `<button class="ghost" type="button" data-act="sync-bank">Pull statements</button>` : ''}
+        ${bank.connected ? `<button class="ghost danger" type="button" data-act="disconnect-bank">Disconnect</button>` : ''}
+      </div>`;
+    })
+    .catch(() => {
+      el.textContent = 'Could not reach bank login.';
+      box.innerHTML = '';
+    });
 }
 
 function fillFeed() {
@@ -809,9 +895,14 @@ function deskView() {
     </form>
     ${orgDesk()}
     <div class="group">
+      <h3>Bank</h3>
+      <p id="bank-status">Checking bank login…</p>
+      <div id="bank-box"></div>
+    </div>
+    <div class="group">
       <h3>Bank feed</h3>
       <p id="feed-status">Checking the feed…</p>
-      <p class="note">A connector posts statement lines to this URL with header Authorization: Bearer and the feed token on the server. There is no bank login in this desk yet. Post a test line here to see it under Bank statements.</p>
+      <p class="note">A connector can still post lines to this URL with Authorization: Bearer and the feed token. Use this to test without a bank login.</p>
       <p class="muted" id="feed-url">https://ledger-futuret3ch.vercel.app/api/feed</p>
       <div class="pair">
         <div class="field"><label for="feed-on">Date</label><input id="feed-on" type="date" value="${today()}" /></div>
@@ -1042,6 +1133,7 @@ function render() {
   if (view === 'desk') {
     fillPractice();
     fillFeed();
+    fillBank();
   }
   if (focusId) {
     const el = document.getElementById(focusId);
@@ -1533,6 +1625,92 @@ root.addEventListener('click', (event) => {
       .catch(() => {
         busy = false;
         flash('Feed did not accept that line');
+        render();
+      });
+    return;
+  }
+  if (act === 'connect-bank') {
+    const email = document.getElementById('bank-email')?.value || '';
+    const mobile = document.getElementById('bank-mobile')?.value || '';
+    busy = true;
+    flash('');
+    render();
+    request('/api/bank', { method: 'POST', body: { action: 'connect', email, mobile } })
+      .then(({ res, data }) => {
+        if (!res.ok) {
+          busy = false;
+          flash(data.error || 'Could not start bank login');
+          render();
+          return;
+        }
+        if (data.url) {
+          window.location.assign(data.url);
+          return;
+        }
+        busy = false;
+        flash('Bank login did not return a consent page');
+        render();
+      })
+      .catch(() => {
+        busy = false;
+        flash('Could not start bank login');
+        render();
+      });
+    return;
+  }
+  if (act === 'sync-bank') {
+    busy = true;
+    flash('');
+    render();
+    request('/api/bank', { method: 'POST', body: { action: 'sync' } })
+      .then(async ({ res, data }) => {
+        if (!res.ok) {
+          busy = false;
+          flash(data.error || 'Could not pull statements');
+          render();
+          return;
+        }
+        const state = await request('/api/state');
+        busy = false;
+        if (state.res.ok) book = state.data;
+        flash(
+          data.pending
+            ? 'The bank is still fetching. Pull statements in a minute.'
+            : data.added
+              ? `Pulled ${data.added} statement line${data.added === 1 ? '' : 's'}.`
+              : 'No new statement lines.'
+        );
+        render();
+      })
+      .catch(() => {
+        busy = false;
+        flash('Could not pull statements');
+        render();
+      });
+    return;
+  }
+  if (act === 'disconnect-bank') {
+    if (!confirm('Disconnect the bank on this desk? Statement lines already pulled stay.')) return;
+    busy = true;
+    flash('');
+    render();
+    request('/api/bank', { method: 'POST', body: { action: 'disconnect' } })
+      .then(async ({ res, data }) => {
+        if (!res.ok) {
+          busy = false;
+          flash(data.error || 'Could not disconnect');
+          render();
+          return;
+        }
+        const state = await request('/api/state');
+        busy = false;
+        if (state.res.ok) book = state.data;
+        flash('Bank disconnected');
+        render();
+      })
+      .catch(() => {
+        busy = false;
+        flash('Could not disconnect');
         render();
       });
     return;
