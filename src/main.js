@@ -1,6 +1,5 @@
 import { bestMatch, draftsFromStatement, signedAmount } from '../lib/bank.js';
 import { auMobile } from '../lib/basiq.js';
-import { BANK_TYPES, bankById, searchBanks } from '../lib/banks-au.js';
 import { CATEGORIES, GST_LABEL, METHOD_LABEL, METHODS, PROFILE_KIND_LABEL, PROFILE_KINDS, RECURRENCE_LABEL, RECURRENCES, STATES, usesOrg } from '../lib/catalog.js';
 import { CSV_TEMPLATE, billsToCsv, draftsFromCsv, toCsv } from '../lib/csv.js';
 import { addDays, longDate, mondayOnOrBefore, quarterRange, shortDate, todayMelbourne } from '../lib/dates.js';
@@ -36,8 +35,6 @@ let flashMsg = '';
 let busy = false;
 let clock = null;
 let kindDraft = null;
-let bankSearch = '';
-let bankPick = '';
 
 function onAppPath() {
   return location.pathname === '/app' || location.pathname.startsWith('/app');
@@ -247,10 +244,28 @@ function returningFromBank() {
   }
 }
 
+function bankReturnJobs() {
+  try {
+    const q = new URLSearchParams(location.search);
+    return [q.get('jobId'), q.get('jobIds')]
+      .flatMap((value) => String(value || '').split(','))
+      .map((part) => part.trim())
+      .filter((part) => part && part !== 'null' && part !== 'undefined');
+  } catch {
+    return [];
+  }
+}
+
 async function finishBankReturn() {
   if (!returningFromBank() || !authed || !book) return;
   view = 'desk';
+  const jobs = bankReturnJobs();
   history.replaceState(null, '', '/app#desk');
+  if (!jobs.length) {
+    flash('Basiq sent you back without a connection. Import a statement, or Connect a bank once Connections is on for this key.');
+    render();
+    return;
+  }
   busy = true;
   render();
   try {
@@ -603,15 +618,17 @@ function fillBank() {
           return `<article class="pay"><b>${esc(conn.institution || 'Bank')}</b><div class="muted">${esc(conn.status || '')}${accounts ? ' · ' + esc(accounts) : ''}</div></article>`;
         })
         .join('');
-      box.innerHTML = `${connections}
-      ${
-        bank.connected
-          ? `<div class="stack" style="margin-top:12px">
-        <button class="ghost" type="button" data-act="sync-bank">Pull statements</button>
-        <button class="ghost danger" type="button" data-act="disconnect-bank">Disconnect</button>
-      </div>`
-          : `<p class="note">A live feed still needs Basiq to enable Connections on this API key. Until then, import a statement on the account above.</p>`
-      }`;
+      box.innerHTML = `<p class="note">You log in at the bank on Basiq. When you come back, pull statements.</p>
+      <div class="pair">
+        <div class="field"><label for="bank-email">Email</label><input id="bank-email" value="${esc(bank.email || currentProfile().email)}" /></div>
+        <div class="field"><label for="bank-mobile">Mobile</label><input id="bank-mobile" value="${esc(bank.mobile || currentProfile().phone)}" placeholder="0412 345 678" /></div>
+      </div>
+      ${connections}
+      <div class="stack" style="margin-top:12px">
+        <button class="solid" type="button" data-act="connect-bank">Connect a bank</button>
+        ${bank.connected ? `<button class="ghost" type="button" data-act="sync-bank">Pull statements</button>` : ''}
+        ${bank.connected ? `<button class="ghost danger" type="button" data-act="disconnect-bank">Disconnect</button>` : ''}
+      </div>`;
     })
     .catch(() => {
       el.textContent = 'Could not reach bank login.';
@@ -696,63 +713,6 @@ function orgSpendHtml() {
           .join('')}</div>`
       : '';
   return block('Still open by division', divs) + block('Still open by franchise', frans) + block('Still open by supplier', sups);
-}
-
-function bankDesk() {
-  const accounts = book.bankAccounts || [];
-  const hits = searchBanks(bankSearch);
-  const picked = bankPick ? bankById(bankPick) : null;
-  const typeOpts = BANK_TYPES.map(([id, label]) => `<option value="${id}">${esc(label)}</option>`).join('');
-  const list = accounts.length
-    ? accounts
-        .map((acc) => {
-          const masked = [acc.bsb, acc.number ? acc.number.slice(-6) : ''].filter(Boolean).join('-');
-          return `<article class="pay">
-            <b>${esc(acc.name)}</b>
-            <div class="muted">${esc(acc.institution)}${masked ? ' · ' + esc(masked) : ''} · ${esc(acc.currency)}</div>
-            <div class="actions">
-              <button class="solid" type="button" data-act="get-bank-feed" data-id="${esc(acc.id)}">Get bank feeds</button>
-              <button class="ghost" type="button" data-act="pick-statement">Manually import a statement</button>
-              <button class="ghost danger" type="button" data-act="drop-bank-account" data-id="${esc(acc.id)}">Remove</button>
-            </div>
-          </article>`;
-        })
-        .join('')
-    : `<p class="note">No bank accounts on this desk yet.</p>`;
-  const search = picked
-    ? `<p class="note">Add accounts for ${esc(picked.name)}</p>
-      <div class="field"><label for="ba-name">Account name</label><input id="ba-name" placeholder="e.g. Business Account" /></div>
-      <div class="field"><label for="ba-type">Account type</label><select id="ba-type">${typeOpts}</select></div>
-      <div class="pair">
-        <div class="field"><label for="ba-bsb">BSB</label><input id="ba-bsb" inputmode="numeric" placeholder="013-711" /></div>
-        <div class="field"><label for="ba-number">Account number</label><input id="ba-number" inputmode="numeric" /></div>
-      </div>
-      <p class="muted">Currency AUD. You can add the account now and import a statement, or get a live feed after.</p>
-      <div class="stack" style="margin-top:12px">
-        <button class="solid" type="button" data-act="add-bank-account">Add account details</button>
-        <button class="ghost" type="button" data-act="clear-bank-pick">Back</button>
-      </div>`
-    : `<p class="note">Search for your bank to add it on this desk. Then import a statement, or get a live feed.</p>
-      <div class="field"><label for="bank-search">Search for banks, credit cards, and payment providers</label><input id="bank-search" value="${esc(bankSearch)}" placeholder="Search" /></div>
-      <p class="muted">Popular in Australia</p>
-      <div id="bank-hits">${hits
-        .map(
-          (row) =>
-            `<article class="pay"><b>${esc(row.name)}</b><div class="actions"><button class="solid" type="button" data-act="pick-bank" data-id="${esc(row.id)}">Add bank account</button></div></article>`
-        )
-        .join('')}</div>`;
-  return `<div class="group">
-    <h3>Bank accounts</h3>
-    ${list}
-    <h3 style="margin-top:18px">Add bank account</h3>
-    ${search}
-    <p id="bank-status">Checking bank login…</p>
-    <div class="pair">
-      <div class="field"><label for="bank-email">Email for the feed</label><input id="bank-email" value="${esc(book.bank?.email || currentProfile().email)}" /></div>
-      <div class="field"><label for="bank-mobile">Australian mobile</label><input id="bank-mobile" value="${esc(book.bank?.mobile || currentProfile().phone)}" placeholder="0412 345 678" /></div>
-    </div>
-    <div id="bank-box"></div>
-  </div>`;
 }
 
 function orgDesk() {
@@ -991,7 +951,11 @@ function deskView() {
       </div>
     </form>
     ${orgDesk()}
-    ${bankDesk()}
+    <div class="group">
+      <h3>Bank</h3>
+      <p id="bank-status">Checking bank login…</p>
+      <div id="bank-box"></div>
+    </div>
     <div class="group">
       <h3>Bank feed</h3>
       <p id="feed-status">Checking the feed…</p>
@@ -1722,62 +1686,7 @@ root.addEventListener('click', (event) => {
       });
     return;
   }
-  if (act === 'pick-bank') {
-    bankPick = target.dataset.id || '';
-    render();
-    return;
-  }
-  if (act === 'clear-bank-pick') {
-    bankPick = '';
-    render();
-    return;
-  }
-  if (act === 'add-bank-account') {
-    const picked = bankById(bankPick);
-    if (!picked) {
-      flash('Pick a bank first.');
-      render();
-      return;
-    }
-    const name = document.getElementById('ba-name')?.value || '';
-    const accountType = document.getElementById('ba-type')?.value || 'everyday';
-    const bsb = document.getElementById('ba-bsb')?.value || '';
-    const number = document.getElementById('ba-number')?.value || '';
-    push(
-      {
-        ...book,
-        bankAccounts: [
-          ...(book.bankAccounts || []),
-          {
-            id: nid('bank'),
-            name: name.trim() || picked.name,
-            institution: picked.name,
-            institutionId: picked.id,
-            accountType,
-            currency: 'AUD',
-            bsb,
-            number,
-            feed: 'none',
-          },
-        ],
-      },
-      'Bank account added'
-    );
-    bankPick = '';
-    return;
-  }
-  if (act === 'drop-bank-account') {
-    const id = target.dataset.id;
-    push(
-      {
-        ...book,
-        bankAccounts: (book.bankAccounts || []).filter((row) => row.id !== id),
-      },
-      'Bank account removed'
-    );
-    return;
-  }
-  if (act === 'get-bank-feed' || act === 'connect-bank') {
+  if (act === 'connect-bank') {
     startBankFeed();
     return;
   }
@@ -2042,18 +1951,6 @@ root.addEventListener('change', (event) => {
   if (event.target.id === 'kind') {
     kindDraft = event.target.value;
     render();
-  }
-  if (event.target.id === 'bank-search') {
-    bankSearch = event.target.value;
-    const box = document.getElementById('bank-hits');
-    if (box) {
-      box.innerHTML = searchBanks(bankSearch)
-        .map(
-          (row) =>
-            `<article class="pay"><b>${esc(row.name)}</b><div class="actions"><button class="solid" type="button" data-act="pick-bank" data-id="${esc(row.id)}">Add bank account</button></div></article>`
-        )
-        .join('');
-    }
   }
 });
 
